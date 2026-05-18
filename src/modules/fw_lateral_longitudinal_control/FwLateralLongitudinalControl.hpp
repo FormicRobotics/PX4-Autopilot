@@ -157,6 +157,7 @@ private:
 		(ParamFloat<px4::params::FW_T_VERT_ACC>) _param_fw_t_vert_acc,
 		(ParamFloat<px4::params::FW_T_STE_R_TC>) _param_ste_rate_time_const,
 		(ParamFloat<px4::params::FW_T_SEB_R_FF>) _param_seb_rate_ff,
+		(ParamFloat<px4::params::FW_T_SPDWEIGHT>) _param_t_spdweight,
 		(ParamFloat<px4::params::FW_T_SPD_STD>) _param_speed_standard_dev,
 		(ParamFloat<px4::params::FW_T_SPD_DEV_STD>) _param_speed_rate_standard_dev,
 		(ParamFloat<px4::params::FW_T_SPD_PRC_STD>) _param_process_noise_standard_dev,
@@ -168,7 +169,9 @@ private:
 		(ParamFloat<px4::params::FW_LND_THRTC_SC>) _param_fw_thrtc_sc,
 		(ParamFloat<px4::params::FW_T_THR_LOW_HGT>) _param_fw_t_thr_low_hgt,
 		(ParamFloat<px4::params::FW_WIND_ARSP_SC>) _param_fw_wind_arsp_sc,
-		(ParamFloat<px4::params::FW_GND_SPD_MIN>) _param_fw_gnd_spd_min
+		(ParamFloat<px4::params::FW_GND_SPD_MIN>) _param_fw_gnd_spd_min,
+		(ParamFloat<px4::params::NPFG_DAMPING>) _param_npfg_damping,
+		(ParamFloat<px4::params::NPFG_PERIOD>) _param_npfg_period
 	)
 
 	hrt_abstime _last_time_loop_ran{};

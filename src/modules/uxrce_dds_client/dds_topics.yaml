@@ -55,6 +55,12 @@ publications:
 - topic: /fmu/out/vehicle_command_ack
   type: px4_msgs::msg::VehicleCommandAck
 
+- topic: /fmu/out/transponder_report
+  type: px4_msgs::msg::TransponderReport
+
+# - topic: /fmu/out/vehicle_angular_velocity
+#   type: px4_msgs::msg::VehicleAngularVelocity
+
 - topic: /fmu/out/vehicle_global_position
   type: px4_msgs::msg::VehicleGlobalPosition
   rate_limit: 50
@@ -136,6 +142,10 @@ publications:
 - topic: /fmu/out/camera_trigger
   type: px4_msgs::msg::CameraTrigger
   rate_limit: 100
+
+  - topic: /fmu/out/gimbal_device_attitude_status
+    type: px4_msgs::msg::GimbalDeviceAttitudeStatus
+    rate_limit: 20.
 
 # Create uORB::Publication
 subscriptions:

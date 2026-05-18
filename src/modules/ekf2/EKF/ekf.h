@@ -259,7 +259,10 @@ public:
 	}
 
 	// fuse single direct state measurement (eg NED velocity, NED position, mag earth field, etc)
-	void fuseDirectStateMeasurement(const float innov, const float innov_var, const float R, const int state_index);
+	// constrain_variances must be false when called from inside constrainStateVar to prevent
+	// unbounded recursion (constrainStateVariances can call back into this function).
+	void fuseDirectStateMeasurement(const float innov, const float innov_var, const float R, const int state_index,
+					bool constrain_variances = true);
 
 	bool measurementUpdate(VectorState &K, const VectorState &H, const float R, const float innovation);
 
@@ -581,6 +584,8 @@ private:
 	estimator_aid_source2d_s _aid_src_gnss_pos{};
 	estimator_aid_source3d_s _aid_src_gnss_vel{};
 
+	uint64_t _time_last_gnss_hgt_rejected{0};
+
 # if defined(CONFIG_EKF2_GNSS_YAW)
 	estimator_aid_source1d_s _aid_src_gnss_yaw {};
 # endif // CONFIG_EKF2_GNSS_YAW
@@ -765,7 +770,6 @@ private:
 # if defined(CONFIG_EKF2_RANGE_FINDER)
 	// update the terrain vertical position estimate using a height above ground measurement from the range finder
 	bool fuseHaglRng(estimator_aid_source1d_s &aid_src, bool update_height, bool update_terrain);
-	void updateRangeHagl(estimator_aid_source1d_s &aid_src);
 	void resetTerrainToRng(estimator_aid_source1d_s &aid_src);
 	float getRngVar() const;
 # endif // CONFIG_EKF2_RANGE_FINDER
@@ -887,6 +891,7 @@ private:
 
 	void controlGnssHeightFusion(const gnssSample &gps_sample);
 	void stopGpsHgtFusion();
+	bool isGnssHgtResetAllowed();
 
 # if defined(CONFIG_EKF2_GNSS_YAW)
 	void controlGnssYawFusion(const gnssSample &gps_sample);
