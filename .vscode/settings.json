@@ -118,5 +118,11 @@
     "/home/naor/Desktop/formic/control/Drone_Op/install/px4_msgs/local/lib/python3.10/dist-packages",
     "/opt/ros/humble/lib/python3.10/site-packages",
     "/opt/ros/humble/local/lib/python3.10/dist-packages"
-  ]
+  ],
+  "chat.tools.terminal.autoApprove": {
+    "/^git remote -v && echo \"---\" && git tag --sort=-version:refname \\| head -20$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  }
 }

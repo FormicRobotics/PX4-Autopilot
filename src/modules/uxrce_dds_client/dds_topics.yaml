@@ -143,9 +143,9 @@ publications:
   type: px4_msgs::msg::CameraTrigger
   rate_limit: 100
 
-  - topic: /fmu/out/gimbal_device_attitude_status
-    type: px4_msgs::msg::GimbalDeviceAttitudeStatus
-    rate_limit: 20.
+- topic: /fmu/out/gimbal_device_attitude_status
+  type: px4_msgs::msg::GimbalDeviceAttitudeStatus
+  rate_limit: 20
 
 # Create uORB::Publication
 subscriptions:
