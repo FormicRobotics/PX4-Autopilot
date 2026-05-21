@@ -111,6 +111,23 @@ PARAM_DEFINE_INT32(COM_DL_LOSS_T, 10);
  */
 PARAM_DEFINE_INT32(COM_POS_WAIT_LIM, 500);
 
+
+
+/**
+ * Enable yaw wait from external vision before entering position mode
+ *
+ * When enabled, the Commander will wait for a valid yaw estimate from the
+ * external vision (EV) source for up to COM_POS_WAIT_LIM iterations before
+ * allowing a transition into position-requiring modes.
+ *
+ * @group Commander
+ * @boolean
+ */
+PARAM_DEFINE_INT32(COM_EV_YAW_WAIT, 0);
+
+
+
+
 /**
  * High Latency Datalink loss time threshold
  *

@@ -53,8 +53,10 @@
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_global_position.h>
+#include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/vehicle_odometry.h>
 #include <uORB/topics/wind.h>
+#include <uORB/topics/formic_state_machine.h>
 
 #if CONSTRAINED_MEMORY
 # define EKF2_MAX_INSTANCES 2
@@ -76,6 +78,16 @@ public:
 
 	void RequestInstance(uint8_t instance) { _request_instance.store(instance); }
 
+	void set_formic_instance(uint8_t instance) {
+		if (instance < EKF2_MAX_INSTANCES) {
+			_instance[instance].use_ekf2_formic = true;
+		}
+	}
+
+	void update_heading_for_instance(uint8_t a, uint8_t b);
+
+
+
 private:
 	static constexpr uint8_t INVALID_INSTANCE{UINT8_MAX};
 	static constexpr uint64_t FILTER_UPDATE_PERIOD{10_ms};
@@ -92,6 +104,8 @@ private:
 	void PublishWindEstimate();
 
 	bool SelectInstance(uint8_t instance);
+
+	// Take the heading from instance a and send it to instance b via a targeted command
 
 	// Update the error scores for all available instances
 	bool UpdateErrorScores();
@@ -137,6 +151,7 @@ private:
 		bool warning{false};
 		bool filter_fault{false};
 		bool timeout{false};
+		bool use_ekf2_formic{false};
 
 		uint8_t healthy_count{0};
 
@@ -187,6 +202,9 @@ private:
 	uint32_t _instance_changed_count{0};
 	hrt_abstime _last_instance_change{0};
 
+	// last value of formic pos_req seen, used to log only on transitions (-1 = uninitialized)
+	int8_t _formic_pos_req_last{-1};
+
 	hrt_abstime _last_status_publish{0};
 	bool _selector_status_publish{false};
 
@@ -236,10 +254,12 @@ private:
 
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	uORB::Subscription _sensors_status_imu{ORB_ID(sensors_status_imu)};
+	uORB::Subscription _formic_state_machine_sub{ORB_ID(formic_state_machine)};
 
 	// Publications
 	uORB::Publication<estimator_selector_status_s> _estimator_selector_status_pub{ORB_ID(estimator_selector_status)};
 	uORB::Publication<sensor_selection_s>          _sensor_selection_pub{ORB_ID(sensor_selection)};
+	uORB::Publication<vehicle_command_s>           _vehicle_command_pub{ORB_ID(vehicle_command)};
 	uORB::Publication<vehicle_attitude_s>          _vehicle_attitude_pub{ORB_ID(vehicle_attitude)};
 	uORB::Publication<vehicle_global_position_s>   _vehicle_global_position_pub{ORB_ID(vehicle_global_position)};
 	uORB::Publication<vehicle_local_position_s>    _vehicle_local_position_pub{ORB_ID(vehicle_local_position)};

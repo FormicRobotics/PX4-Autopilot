@@ -118,6 +118,10 @@ bool EKF2Selector::SelectInstance(uint8_t ekf_instance)
 		_sensor_selection_pub.publish(sensor_selection);
 
 		if (_selected_instance != INVALID_INSTANCE) {
+			// push the outgoing instance's yaw into the incoming instance
+			// so the new instance starts with an aligned heading
+			update_heading_for_instance(_selected_instance, ekf_instance);
+
 			// switch callback registration
 			_instance[_selected_instance].estimator_attitude_sub.unregisterCallback();
 			_instance[_selected_instance].estimator_status_sub.unregisterCallback();
@@ -741,21 +745,60 @@ void EKF2Selector::Run()
 		float alternative_error = 0.f; // looking for instances that have error lower than the current primary
 		float best_test_ratio = FLT_MAX;
 
+		formic_state_machine_s formic_state{};
+		_formic_state_machine_sub.copy(&formic_state);
+		const bool pos_req = formic_state.let_update_ev;
+
+		// locate the EV-dedicated (formic) EKF instance, if one was flagged via set_formic_instance()
+		uint8_t formic_instance = INVALID_INSTANCE;
+		for (uint8_t i = 0; i < _available_instances; i++) {
+			if (_instance[i].use_ekf2_formic) {
+				formic_instance = i;
+				break;
+			}
+		}
+
+		const bool formic_available   = (formic_instance != INVALID_INSTANCE);
+		const bool formic_healthy     = formic_available && _instance[formic_instance].healthy.get_state();
+		const bool selected_is_formic = formic_available && (_selected_instance == formic_instance);
+
+		// Formic policy:
+		//   pos_req == true  AND formic healthy   -> prefer formic (EV solution available)
+		//   pos_req == true  AND formic unhealthy -> fall back to best non-formic (no EV)
+		//   pos_req == false                      -> never use formic
+		const bool want_formic    = pos_req && formic_healthy;
+		const bool exclude_formic = !want_formic;
+
+		// log only on transitions so we don't spam the console at the run-rate
+		const int8_t pos_req_now = pos_req ? 1 : 0;
+		if (pos_req_now != _formic_pos_req_last) {
+			PX4_INFO("formic pos_req %d (selected=%d, formic_instance=%d, formic_healthy=%d)",
+				 pos_req, _selected_instance, formic_instance, formic_healthy);
+			_formic_pos_req_last = pos_req_now;
+		}
+
 		uint8_t best_ekf = _selected_instance;
 		uint8_t best_ekf_alternate = INVALID_INSTANCE;
 		uint8_t best_ekf_different_imu = INVALID_INSTANCE;
 
 		// loop through all available instances to find if an alternative is available
 		for (int i = 0; i < _available_instances; i++) {
+			// PX4_INFO("Instance %d Formic flag is: %d", i, _instance[i].use_ekf2_formic);
 			// Use an alternative instance if  -
 			// (healthy and has updated recently)
 			// AND
 			// (has relative error less than selected instance and has not been the selected instance for at least 10 seconds
 			// OR
 			// selected instance has stopped updating
+			// skip the EV-dedicated (formic) EKF whenever the policy excludes it
+			if (exclude_formic && _instance[i].use_ekf2_formic) {
+				continue;
+			}
+
 			if (_instance[i].healthy.get_state() && (i != _selected_instance)) {
 				const float test_ratio = _instance[i].combined_test_ratio;
 				const float relative_error = _instance[i].relative_test_ratio;
+
 
 				if (relative_error < alternative_error) {
 					best_ekf_alternate = i;
@@ -779,7 +822,18 @@ void EKF2Selector::Run()
 			}
 		}
 
-		if (!_instance[_selected_instance].healthy.get_state()) {
+		if (want_formic && !selected_is_formic) {
+			// commander asked for EV-based position and the formic EKF is healthy -> switch in
+			SelectInstance(formic_instance);
+
+		} else if (!want_formic && selected_is_formic) {
+			// pos_req released, or formic lost its EV solution -> leave the formic EKF
+			// fall back to the best healthy non-formic; if none was found, stay put (degraded but safe)
+			if (best_ekf != _selected_instance) {
+				SelectInstance(best_ekf);
+			}
+
+		} else if (!_instance[_selected_instance].healthy.get_state()) {
 			// prefer the best healthy instance using a different IMU
 			if (!SelectInstance(best_ekf_different_imu)) {
 				// otherwise switch to the healthy instance with best overall test ratio
@@ -793,6 +847,7 @@ void EKF2Selector::Run()
 
 			// if this instance has a significantly lower relative error to the active primary, we consider it as a
 			// better instance and would like to switch to it even if the current primary is healthy
+			
 			SelectInstance(best_ekf_alternate);
 
 		} else if (_request_instance.load() != INVALID_INSTANCE) {
@@ -868,15 +923,46 @@ void EKF2Selector::PrintStatus()
 
 	if (_selected_instance == INVALID_INSTANCE) {
 		PX4_WARN("selected instance: None");
+
+	} else {
+		PX4_INFO("selected instance: %" PRIu8, _selected_instance);
 	}
 
 	for (int i = 0; i < _available_instances; i++) {
 		const EstimatorInstance &inst = _instance[i];
 
-		PX4_INFO("%" PRIu8 ": ACC: %" PRIu32 ", GYRO: %" PRIu32 ", MAG: %" PRIu32 ", %s, test ratio: %.7f (%.5f) %s",
+		PX4_INFO("%" PRIu8 ": ACC: %" PRIu32 ", GYRO: %" PRIu32 ", MAG: %" PRIu32 ", %s, test ratio: %.7f (%.5f) %s use_ekf2_formic: %d",
 			 inst.instance, inst.accel_device_id, inst.gyro_device_id, inst.mag_device_id,
 			 inst.healthy.get_state() ? "healthy" : "unhealthy",
 			 (double)inst.combined_test_ratio, (double)inst.relative_test_ratio,
-			 (_selected_instance == i) ? "*" : "");
+			 (_selected_instance == i) ? "*" : "", inst.use_ekf2_formic);
 	}
+
 }
+
+
+void EKF2Selector::update_heading_for_instance(uint8_t a, uint8_t b)
+{
+	// Take the heading from instance a and apply it to instance b.
+	if (a >= EKF2_MAX_INSTANCES || b >= EKF2_MAX_INSTANCES) {
+		return;
+	}
+	vehicle_attitude_s att{};
+
+	if (!_instance[a].estimator_attitude_sub.copy(&att) || att.timestamp == 0) {
+		return;
+	}
+	const float yaw =  matrix::Eulerf(Quatf(att.q)).psi();
+	vehicle_command_s cmd{};
+	cmd.command          = vehicle_command_s::VEHICLE_CMD_EXTERNAL_ATTITUDE_ESTIMATE;
+	cmd.param3           = math::degrees(yaw); // heading in degrees
+	cmd.param7           = 5.f;                // accuracy in degrees
+	cmd.target_component = b + 1;              // 1-based: targets only instance b
+	cmd.timestamp        = hrt_absolute_time();
+	_vehicle_command_pub.publish(cmd);
+}
+
+
+
+
+

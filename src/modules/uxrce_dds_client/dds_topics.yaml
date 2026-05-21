@@ -121,6 +121,10 @@ publications:
   type: px4_msgs::msg::EstimatorAidSource1d
   rate_limit: 10
 
+- topic: /fmu/out/estimator_aid_src_ev_vel
+  type: px4_msgs::msg::EstimatorAidSource3d
+  rate_limit: 10
+
 - topic: /fmu/out/vehicle_local_position_setpoint
   type: px4_msgs::msg::VehicleLocalPositionSetpoint
   rate_limit: 50

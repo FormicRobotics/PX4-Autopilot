@@ -118,3 +118,10 @@ parameters:
         long: If set to true, the EKF will only be updated when a new position measurement is available. This can be used to reduce the computational load when fusing high rate vision velocity measurements.
       type: boolean
       default: 0
+    EKF2_EV_FORMIC:
+      description:
+        short: Enable Formic EV fusion instance
+        long: If set to true, this EKF2 instance will use the Formic external vision fusion path.
+      type: boolean
+      default: 0
+      reboot_required: true

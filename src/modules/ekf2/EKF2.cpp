@@ -49,11 +49,12 @@ static px4::atomic<EKF2 *> _objects[EKF2_MAX_INSTANCES] {};
 static px4::atomic<EKF2Selector *> _ekf2_selector {nullptr};
 #endif // CONFIG_EKF2_MULTI_INSTANCE
 
-EKF2::EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode):
+EKF2::EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode, bool ev_formic_instance):
 	ModuleParams(nullptr),
 	ScheduledWorkItem(MODULE_NAME, config),
 	_replay_mode(replay_mode && !multi_mode),
 	_multi_mode(multi_mode),
+	_ev_formic_instance(ev_formic_instance),
 	_instance(multi_mode ? -1 : 0),
 	_attitude_pub(multi_mode ? ORB_ID(estimator_attitude) : ORB_ID(vehicle_attitude)),
 	_local_position_pub(multi_mode ? ORB_ID(estimator_local_position) : ORB_ID(vehicle_local_position)),
@@ -582,21 +583,27 @@ void EKF2::Run()
 			}
 
 			if (vehicle_command.command == vehicle_command_s::VEHICLE_CMD_EXTERNAL_ATTITUDE_ESTIMATE) {
-				if (PX4_ISFINITE(vehicle_command.param3)) {
-					const float heading = wrap_pi(math::radians(vehicle_command.param3));
-					static constexpr float kDefaultHeadingAccuracyDeg = 20.f;
-					const float heading_accuracy = math::radians(PX4_ISFINITE(vehicle_command.param7)
-								       ? vehicle_command.param7
-								       : kDefaultHeadingAccuracyDeg);
-					_ekf.resetHeadingToExternalObservation(heading, heading_accuracy);
-					command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED;
+				// target_component 0 = broadcast; non-zero must match this instance (1-based)
+				const bool for_this_instance = (vehicle_command.target_component == 0)
+							       || (vehicle_command.target_component == (uint8_t)(_instance + 1));
 
-				} else {
-					command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_UNSUPPORTED;
+				if (for_this_instance) {
+					if (PX4_ISFINITE(vehicle_command.param3)) {
+						const float heading = wrap_pi(math::radians(vehicle_command.param3));
+						static constexpr float kDefaultHeadingAccuracyDeg = 20.f;
+						const float heading_accuracy = math::radians(PX4_ISFINITE(vehicle_command.param7)
+									       ? vehicle_command.param7
+									       : kDefaultHeadingAccuracyDeg);
+						_ekf.resetHeadingToExternalObservation(heading, heading_accuracy);
+						command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED;
+
+					} else {
+						command_ack.result = vehicle_command_ack_s::VEHICLE_CMD_RESULT_UNSUPPORTED;
+					}
+
+					command_ack.timestamp = hrt_absolute_time();
+					_vehicle_command_ack_pub.publish(command_ack);
 				}
-
-				command_ack.timestamp = hrt_absolute_time();
-				_vehicle_command_ack_pub.publish(command_ack);
 			}
 		}
 	}
@@ -2204,16 +2211,21 @@ void EKF2::UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps)
 bool EKF2::UpdateExtVisionSample(ekf2_timestamps_s &ekf2_timestamps)
 {
 	// EKF external vision sample
+
+	if (_ev_formic_instance == false) {
+		return false;
+	}
+
 	bool new_ev_odom = false;
 
 	///////add by naor ////////////////
-	formic_state_machine_s formic_state_machine{};
-	_formic_state_machine_sub.copy(&formic_state_machine);
+	// formic_state_machine_s formic_state_machine{};
+	// _formic_state_machine_sub.copy(&formic_state_machine);
 
 
-	if (_param_ekf2_ev_pos_only.get() && !formic_state_machine.let_update_ev) {
-		return false;
-	}
+	// if (_param_ekf2_ev_pos_only.get() && !formic_state_machine.let_update_ev) {
+		// return false;
+	// }
 	/////add by naor ////////////////
 	vehicle_odometry_s ev_odom;
 
@@ -2788,6 +2800,10 @@ int EKF2::task_spawn(int argc, char *argv[])
 		replay_mode = true;
 	}
 
+	// Read formic EV instance param (available in both single and multi mode)
+	int32_t ev_formic = 0;
+	param_get(param_find("EKF2_EV_FORMIC"), &ev_formic);
+
 #if defined(CONFIG_EKF2_MULTI_INSTANCE)
 	bool multi_mode = false;
 	int32_t imu_instances = 0;
@@ -2846,7 +2862,7 @@ int EKF2::task_spawn(int argc, char *argv[])
 #endif // CONFIG_EKF2_MAGNETOMETER
 	}
 
-	if (multi_mode && !replay_mode) {
+	if ((multi_mode || ev_formic) && !replay_mode) {
 		// Start EKF2Selector if it's not already running
 		if (_ekf2_selector.load() == nullptr) {
 			EKF2Selector *inst = new EKF2Selector();
@@ -2858,6 +2874,12 @@ int EKF2::task_spawn(int argc, char *argv[])
 				PX4_ERR("Failed to create EKF2 selector");
 				return PX4_ERROR;
 			}
+		}
+
+		// In single-IMU mode with ev_formic enabled, still need one regular instance
+		if (!multi_mode && ev_formic) {
+			imu_instances = 1;
+			mag_instances = 1;
 		}
 
 		const hrt_abstime time_started = hrt_absolute_time();
@@ -2888,7 +2910,7 @@ int EKF2::task_spawn(int argc, char *argv[])
 					if ((vehicle_mag_sub.advertised() || mag == 0) && (vehicle_imu_sub.advertised())) {
 
 						if (!ekf2_instance_created[imu][mag]) {
-							EKF2 *ekf2_inst = new EKF2(true, px4::ins_instance_to_wq(imu), false);
+							EKF2 *ekf2_inst = new EKF2(true, px4::ins_instance_to_wq(imu), false, false);
 
 							if (ekf2_inst && ekf2_inst->multi_init(imu, mag)) {
 								int actual_instance = ekf2_inst->instance(); // match uORB instance numbering
@@ -2930,13 +2952,38 @@ int EKF2::task_spawn(int argc, char *argv[])
 			}
 		}
 
+		// Spawn dedicated formic EV instance on IMU 0 / MAG 0 if enabled
+		if (ev_formic) {
+			EKF2 *ekf2_formic = new EKF2(true, px4::ins_instance_to_wq(0), false, true);
+
+			if (ekf2_formic && ekf2_formic->multi_init(0, 0)) {
+				const int actual_instance = ekf2_formic->instance();
+
+				if ((actual_instance >= 0) && (_objects[actual_instance].load() == nullptr)) {
+					_objects[actual_instance].store(ekf2_formic);
+					success = true;
+					PX4_INFO("starting formic EV instance %d", actual_instance);
+					_ekf2_selector.load()->set_formic_instance(actual_instance);
+					_ekf2_selector.load()->ScheduleNow();
+
+				} else {
+					PX4_ERR("formic EV instance numbering problem: %d", actual_instance);
+					delete ekf2_formic;
+				}
+
+			} else {
+				PX4_ERR("formic EV alloc and init failed");
+				delete ekf2_formic;
+			}
+		}
+
 	} else
 
 #endif // CONFIG_EKF2_MULTI_INSTANCE
 
 	{
 		// otherwise launch regular
-		EKF2 *ekf2_inst = new EKF2(false, px4::wq_configurations::INS0, replay_mode);
+		EKF2 *ekf2_inst = new EKF2(false, px4::wq_configurations::INS0, replay_mode, ev_formic != 0);
 
 		if (ekf2_inst) {
 			_objects[0].store(ekf2_inst);
@@ -2946,7 +2993,10 @@ int EKF2::task_spawn(int argc, char *argv[])
 	}
 
 	return success ? PX4_OK : PX4_ERROR;
+
 }
+
+
 
 int EKF2::print_usage(const char *reason)
 {

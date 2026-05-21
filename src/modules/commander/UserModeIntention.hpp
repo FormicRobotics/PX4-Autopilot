@@ -37,7 +37,7 @@
 #include <uORB/Subscription.hpp>
 #include <uORB/Publication.hpp>
 #include <uORB/topics/vehicle_status.h>
-#include <uORB/topics/estimator_aid_source1d.h>
+// #include <uORB/topics/estimator_aid_source1d.h>
 #include <uORB/topics/formic_state_machine.h>
 
 #include "HealthAndArmingChecks/HealthAndArmingChecks.hpp"
@@ -130,8 +130,6 @@ private:
 	param_t _param_pos_wait_limit{PARAM_INVALID}; ///< handle for COM_POS_WAIT_LIM parameter
 	uint8_t _pending_nav_state{UINT8_MAX};        ///< mode waiting for position lock (UINT8_MAX = none)
 	int     _pos_wait_count{0};                   ///< total iterations waited since the pending request was parked
-	uORB::Subscription _ev_yaw_sub{ORB_ID(estimator_aid_src_ev_yaw)}; ///< EV yaw aid source
-	estimator_aid_source1d_s _ev_yaw{};           ///< last received EV yaw aid data (timestamp==0 means never received)
 	uORB::Publication<formic_state_machine_s> _formic_state_machine_pub{ORB_ID(formic_state_machine)}; ///< Formic state machine publisher
 	///////add by naor ////////////////
 };

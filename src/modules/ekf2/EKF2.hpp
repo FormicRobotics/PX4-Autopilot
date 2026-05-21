@@ -130,7 +130,7 @@ class EKF2 final : public ModuleParams, public px4::ScheduledWorkItem
 {
 public:
 	EKF2() = delete;
-	EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode);
+	EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode, bool ev_formic_instance = false);
 	~EKF2() override;
 
 	/** @see ModuleBase */
@@ -270,6 +270,7 @@ private:
 
 	const bool _replay_mode{false};			///< true when we use replay data from a log
 	const bool _multi_mode;
+	const bool _ev_formic_instance{false};		///< true when this instance uses EV formic fusion
 	int _instance{0};
 
 	px4::atomic_bool _task_should_exit{false};
@@ -488,6 +489,7 @@ private:
 	DEFINE_PARAMETERS(
 		(ParamBool<px4::params::EKF2_LOG_VERBOSE>) _param_ekf2_log_verbose,
 		(ParamBool<px4::params::EKF2_EV_POS_ONLY>) _param_ekf2_ev_pos_only,
+		(ParamBool<px4::params::EKF2_EV_FORMIC>) _param_ekf2_ev_formic,
 		(ParamExtInt<px4::params::EKF2_PREDICT_US>) _param_ekf2_predict_us,
 		(ParamExtFloat<px4::params::EKF2_DELAY_MAX>) _param_ekf2_delay_max,
 		(ParamExtInt<px4::params::EKF2_IMU_CTRL>) _param_ekf2_imu_ctrl,

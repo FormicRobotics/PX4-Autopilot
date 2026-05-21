@@ -130,11 +130,6 @@ bool UserModeIntention::modeRequiresPosition(uint8_t nav_state) const
 void UserModeIntention::tick()
 {
 	///////add by naor ////////////////
-	if (_ev_yaw_sub.updated()) {
-		_ev_yaw_sub.copy(&_ev_yaw);
-	}
-
-	const bool ev_yaw_available = (_ev_yaw.timestamp != 0);
 
 	if (_pending_nav_state == UINT8_MAX) {
 		return;
@@ -142,7 +137,7 @@ void UserModeIntention::tick()
 
 	const bool pos_ok = _health_and_arming_checks.canRun(_pending_nav_state);
 
-	if (pos_ok && ev_yaw_available && _ev_yaw.fused) {
+	if (pos_ok) {
 		PX4_INFO("Position available - switching to pending mode %d after %d iterations", _pending_nav_state, _pos_wait_count);
 		const uint8_t mode = _pending_nav_state;
 		_pending_nav_state = UINT8_MAX;

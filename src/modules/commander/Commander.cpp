@@ -1896,7 +1896,7 @@
 		 _multicopter_throw_launch.update(isArmed());
 
 
-		 turtleModeUpdate();
+		//  turtleModeUpdate(); // remove to this time the turtle mode 
 		 
  
 		 vtolStatusUpdate();
