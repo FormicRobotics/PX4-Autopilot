@@ -110,6 +110,10 @@ private:
 	// Update the error scores for all available instances
 	bool UpdateErrorScores();
 
+	// Returns true if the EV-dedicated (formic) instance currently has a usable EV solution.
+	// Extend this with additional EV-health checks as needed.
+	bool IsFormicEvHealthy(uint8_t instance);
+
 	// Subscriptions (per estimator instance)
 	struct EstimatorInstance {
 

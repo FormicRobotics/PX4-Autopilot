@@ -299,7 +299,14 @@ bool EKF2Selector::UpdateErrorScores()
 
 			_instance[i].combined_test_ratio = combined_test_ratio;
 
-			const bool healthy = (status.filter_fault_flags == 0) && (combined_test_ratio > 0.f);
+			bool healthy = (status.filter_fault_flags == 0) && (combined_test_ratio > 0.f);
+
+			// For the EV-dedicated (formic) EKF, "healthy" also requires a usable EV solution.
+			// Without it, this instance has nothing to offer the selector.
+			if (_instance[i].use_ekf2_formic) {
+				healthy = healthy && IsFormicEvHealthy(i);
+			}
+
 			_instance[i].healthy.set_state_and_update(healthy, status.timestamp);
 
 			_instance[i].warning = (combined_test_ratio >= 1.f);
@@ -940,6 +947,32 @@ void EKF2Selector::PrintStatus()
 
 }
 
+
+bool EKF2Selector::IsFormicEvHealthy(uint8_t instance)
+{
+	if (instance >= EKF2_MAX_INSTANCES || !_instance[instance].use_ekf2_formic) {
+		return false;
+	}
+
+	// EV must be producing a fresh, valid local xy position.
+	vehicle_local_position_s lp{};
+
+	if (!_instance[instance].estimator_local_position_sub.copy(&lp)) {
+		return false;
+	}
+
+	if (!lp.xy_valid) {
+		return false;
+	}
+
+	if (hrt_elapsed_time(&lp.timestamp) > 500_ms) {
+		return false;
+	}
+
+	// Add further EV-health checks here.
+
+	return true;
+}
 
 void EKF2Selector::update_heading_for_instance(uint8_t a, uint8_t b)
 {
