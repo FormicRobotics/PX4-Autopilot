@@ -40,13 +40,34 @@ MulticopterTurtleMode::MulticopterTurtleMode(ModuleParams *parent) :
 {
 	getMotorData(_motor_data);
 	_thr_factor = thr_factor();
-	updateDshot3dParameter(false, false);
-
-
+	// NOTE: the initial 3d_off is *not* sent from here. This constructor runs inside
+	// `new Commander()`, i.e. before commander has even registered itself, and the boot
+	// script starts dshot only after commander - so the command could never reach the
+	// driver. It is sent from update() instead, see _startup_3d_off_pending.
 }
 
 void MulticopterTurtleMode::update(const bool armed)
 {
+	// Send the initial 3d_off once the dshot driver is up (it starts after commander).
+	// Retry quietly for a few seconds, then give up instead of warning on every cycle.
+	// Skipped entirely when turtle mode is disabled, so commander never talks to dshot.
+	if (_startup_3d_off_pending && !armed && _param_com_turtle_en.get()) {
+		const hrt_abstime now = hrt_absolute_time();
+
+		if (now >= _startup_3d_off_next_try) {
+			if (updateDshot3dParameter(false, armed, true)) {
+				_startup_3d_off_pending = false;
+
+			} else if (++_startup_3d_off_attempts >= STARTUP_3D_OFF_MAX_ATTEMPTS) {
+				_startup_3d_off_pending = false;
+				PX4_WARN("could not send initial dshot 3d_off, ESC 3D state unknown");
+
+			} else {
+				_startup_3d_off_next_try = now + STARTUP_3D_OFF_RETRY_INTERVAL;
+			}
+		}
+	}
+
 	// Check if we need to send 3d_off command after disarming
 	// Only send if ESC state is ON but we're disarmed and not in ACTIVE_TURTLE or ENTERING_TURTLE
 	// This handles the case when exiting ACTIVE_TURTLE - 3d_off will be sent after disarm completes
@@ -192,7 +213,7 @@ void MulticopterTurtleMode::setState(TurtleModeState new_state)
 	_turtle_mode_state = new_state;
 }
 
-void MulticopterTurtleMode::updateDshot3dParameter(bool enable, bool armed)
+bool MulticopterTurtleMode::updateDshot3dParameter(bool enable, bool armed, bool quiet)
 {
 	// DShot commands only execute when motors are disarmed (output == 0)
 	// For enable: we'll delay arming until command completes (300ms)
@@ -200,9 +221,9 @@ void MulticopterTurtleMode::updateDshot3dParameter(bool enable, bool armed)
 
 	if (armed) {
 		// Do nothing if armed - > return
-		return;
+		return false;
 	}
-	
+
 
 	param_t param_handle = param_find("DSHOT_3D_ENABLE"); // find param for scaling to 3d 
 	int result_param = PX4_ERROR;
@@ -224,21 +245,23 @@ void MulticopterTurtleMode::updateDshot3dParameter(bool enable, bool armed)
 
 	if (result_dshot == 0 && result_param == PX4_OK) {
 		// Command succeeded - update internal state
-		_turtle_mode_esc_internal_state = enable ? 
-			TurtleModeESCInternalState::TURTLE_MODE_ESC_INTERNAL_STATE_3D_ON : 
-			TurtleModeESCInternalState::TURTLE_MODE_ESC_INTERNAL_STATE_3D_OFF; // if have telemetry data from the esc need to add here function for each motor 
+		_turtle_mode_esc_internal_state = enable ?
+			TurtleModeESCInternalState::TURTLE_MODE_ESC_INTERNAL_STATE_3D_ON :
+			TurtleModeESCInternalState::TURTLE_MODE_ESC_INTERNAL_STATE_3D_OFF; // if have telemetry data from the esc need to add here function for each motor
 		if (enable) {
 			// For enable: delay arming until command completes
 			_waiting_for_dshot_command = true;
 			_dshot_command_start_time = hrt_absolute_time();
-		} else {
-			return;
 		}
-	} else {
-		if (result_param != PX4_OK || result_dshot != 0) {
-			PX4_WARN("failed send dshot command to the dshot hardware"); // maby set 3d on to try run this function again
-		}
+
+		return true;
 	}
+
+	if (!quiet) {
+		PX4_WARN("failed send dshot command to the dshot hardware"); // maby set 3d on to try run this function again
+	}
+
+	return false;
 }
 
 uint8_t MulticopterTurtleMode::getDesiredNavState() const

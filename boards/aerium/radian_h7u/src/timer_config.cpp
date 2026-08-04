@@ -34,27 +34,25 @@
 #include <px4_arch/io_timer_hw_description.h>
 
 constexpr io_timers_t io_timers[MAX_IO_TIMERS] = {
-    // index‑0 ─ TIM3  : DMA1 / Stream‑2 / Channel‑5  (unchanged)
-    initIOTimer(Timer::Timer3,  DMA{DMA::Index1, DMA::Stream2, DMA::Channel5}),
+    // NOTE: bidirectional DShot (DSHOT_BIDIR_EN) only ever uses io_timers[0]
+    // (see _bidi_timer_index in stm32_common/dshot/dshot.c), so the motor timer
+    // must be at index 0. On STM32H7 the DMA stream/channel is assigned by the
+    // DMAMUX at runtime; only the controller index (DMA1/DMA2) is taken from DMA{}.
 
-    // index‑1 ─ TIM5  : DMA1 / Stream‑0 / Channel‑6  (unchanged)
-    initIOTimer(Timer::Timer5,  DMA{DMA::Index1, DMA::Stream0, DMA::Channel6}),
+    // index-0 - TIM5  : Motors 1-4   (must stay first for bidirectional DShot)
+    initIOTimer(Timer::Timer5,  DMA{DMA::Index1}),
 
-    // index‑2 ─ TIM4  : DMA1 / Stream‑6 / Channel‑2  (unchanged)
-    initIOTimer(Timer::Timer4,  DMA{DMA::Index1, DMA::Stream6, DMA::Channel2}),
+    // index-1 - TIM3  : Aux / Capture 13-16
+    initIOTimer(Timer::Timer3,  DMA{DMA::Index1}),
 
-    // index‑3 ─ TIM1  : ADVANCED timer for motors 9‑10  (replaces TIM8)
-    //                 Uses DMA1 with DMAMUX‑assigned request; no fixed stream needed.
+    // index-2 - TIM4  : Motors 5-8
+    initIOTimer(Timer::Timer4,  DMA{DMA::Index1}),
+
+    // index-3 - TIM1  : ADVANCED timer for motors 9-10  (replaces TIM8)
     initIOTimer(Timer::Timer1,  DMA{DMA::Index1}),
 
-    // index‑4 ─ TIM15 : Aux 11‑12  (unchanged; software PWM OK if DMA not required)
-    // initIOTimer(Timer::Timer2),
-
-    // index‑4 ─ TIM15 : Aux 11‑12  (unchanged; software PWM OK if DMA not required)
+    // index-4 - TIM15 : Aux 11-12  (TIM15 has no update-DMA -> PWM only, no DShot)
     initIOTimer(Timer::Timer15),
-
-    // index‑5 ─ TIM16 : future / capture  (unchanged)
-    // initIOTimer(Timer::Timer16),
 };
 
 

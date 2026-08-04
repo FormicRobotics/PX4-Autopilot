@@ -123,7 +123,7 @@ private:
 	void publishMotorCommands(const float throttle[12]);
 	float getAuxChannel() const;
 	float getAuxChannelValue();
-	void updateDshot3dParameter(bool enable, bool armed);
+	bool updateDshot3dParameter(bool enable, bool armed, bool quiet = false);
 	void setState(MulticopterTurtleUtil::TurtleModeState new_state);
 	void getMotorData(MulticopterTurtleUtil::Motor_data motor_data[]);
 
@@ -138,6 +138,9 @@ private:
 	bool _nav_state_change_requested{false}; // Track if we've already requested nav_state change to STAB
 	bool _waiting_for_dshot_command{false}; // Flag to delay arming until DShot command completes
 	hrt_abstime _dshot_command_start_time{0}; // Time when DShot command was sent
+	bool _startup_3d_off_pending{true}; // Initial 3D-off still has to be sent to the ESCs
+	hrt_abstime _startup_3d_off_next_try{0}; // Time of the next initial 3D-off attempt
+	uint8_t _startup_3d_off_attempts{0}; // Number of initial 3D-off attempts made so far
 	uORB::Subscription _manual_control_setpoint_sub{ORB_ID(manual_control_setpoint)};
 	uORB::Publication<actuator_motors_s> _actuator_motors_pub{ORB_ID(actuator_motors)};
 	
@@ -146,6 +149,8 @@ private:
 	MulticopterTurtleUtil::MotorCommands getMotorCommands();
 	static constexpr float AUX_CHANNEL_THRESHOLD{0.5f};
 	static constexpr uint16_t ALL_MOTORS_REVERSIBLE{0xFFFF};
+	static constexpr hrt_abstime STARTUP_3D_OFF_RETRY_INTERVAL{200000}; // 200ms
+	static constexpr uint8_t STARTUP_3D_OFF_MAX_ATTEMPTS{25}; // ~5s, dshot is started after commander
 
 	DEFINE_PARAMETERS(
 		(ParamBool<px4::params::COM_TURTLE_EN>) _param_com_turtle_en,
