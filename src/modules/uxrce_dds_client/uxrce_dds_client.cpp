@@ -49,6 +49,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+static constexpr char NAMESPACE_PREFIX[] = "uav_";
 #define PARTICIPANT_XML_SIZE 512
 static constexpr uint8_t TIMESYNC_MAX_TIMEOUTS = 10;
 
@@ -371,12 +372,16 @@ bool UxrceddsClient::setupSession(uxrSession *session)
 	}
 
 	_connected = true;
+	publishDdsFlag();
 	return true;
 }
 
 void UxrceddsClient::deleteSession(uxrSession *session)
 {
 	delete_repliers();
+
+	// Check if we need to publish disconnected status before clearing session state
+	bool was_connected = _connected || _session_created;
 
 	if (_session_created) {
 		uxr_delete_session_retries(session, _connected ? 1 : 0);
@@ -385,6 +390,12 @@ void UxrceddsClient::deleteSession(uxrSession *session)
 
 	_last_payload_tx_rate = 0;
 	_timesync.reset_filter();
+
+	// Publish disconnected status when session is deleted
+	if (was_connected) {
+		_connected = false;
+		publishDdsFlag();
+	}
 }
 
 UxrceddsClient::~UxrceddsClient()
@@ -503,7 +514,10 @@ void UxrceddsClient::checkConnectivity(uxrSession *session)
 
 	// Start ping and tx/rx rate monitoring, unless we're actively sending & receiving payloads successfully
 	if ((_last_payload_tx_rate > 0) && (_last_payload_rx_rate > 0)) {
-		_connected = true;
+		if (!_connected) {
+			_connected = true;
+			publishDdsFlag();
+		}
 		_num_pings_missed = 0;
 		_last_ping = now;
 
@@ -538,7 +552,10 @@ void UxrceddsClient::checkConnectivity(uxrSession *session)
 
 		if (_num_pings_missed >= 3) {
 			PX4_ERR("No ping response, disconnecting");
-			_connected = false;
+			if (_connected) {
+				_connected = false;
+				publishDdsFlag();
+			}
 		}
 
 		int32_t tx_timeout = _param_uxrce_dds_tx_to.get();
@@ -546,14 +563,28 @@ void UxrceddsClient::checkConnectivity(uxrSession *session)
 
 		if (tx_timeout > 0 && _num_tx_rate_zero >= tx_timeout) {
 			PX4_ERR("Payload TX rate zero for too long, disconnecting");
-			_connected = false;
+			if (_connected) {
+				_connected = false;
+				publishDdsFlag();
+			}
 		}
 
 		if (rx_timeout > 0 && _num_rx_rate_zero >= rx_timeout) {
 			PX4_ERR("Payload RX rate zero for too long, disconnecting");
-			_connected = false;
+			if (_connected) {
+				_connected = false;
+				publishDdsFlag();
+			}
 		}
 	}
+}
+
+void UxrceddsClient::publishDdsFlag()
+{
+	dds_flag_s dds_flag{};
+	dds_flag.timestamp = hrt_absolute_time();
+	dds_flag.dds_connected = _connected || _session_created;
+	_dds_flag_pub.publish(dds_flag);
 }
 
 void UxrceddsClient::resetConnectivityCounters()
@@ -714,7 +745,19 @@ void UxrceddsClient::run()
 			// Check if there is still connectivity with the agent
 			checkConnectivity(&session);
 
+			// Publish DDS connection status periodically (every 1 second)
+			if (hrt_elapsed_time(&_last_status_update) > 1_s) {
+				publishDdsFlag();
+				_last_status_update = hrt_absolute_time();
+			}
+
 			perf_end(_loop_perf);
+		}
+
+		// Publish disconnected status when exiting the loop
+		if (_connected) {
+			_connected = false;
+			publishDdsFlag();
 		}
 
 		deleteSession(&session);
@@ -909,7 +952,7 @@ int UxrceddsClient::task_spawn(int argc, char *argv[])
 {
 	_task_id = px4_task_spawn_cmd("uxrce_dds_client",
 				      SCHED_DEFAULT,
-				      SCHED_PRIORITY_DEFAULT,
+				      SCHED_PRIORITY_FAST_DRIVER,
 				      PX4_STACK_ADJUSTED(8000),
 				      (px4_main_t)&run_trampoline,
 				      (char *const *)argv);
@@ -1028,6 +1071,23 @@ UxrceddsClient *UxrceddsClient::instantiate(int argc, char *argv[])
 		}
 	}
 
+	if (client_namespace == nullptr) {
+		int32_t ns_idx = -1;
+		param_get(param_find("UXRCE_DDS_NS_IDX"), &ns_idx);
+
+		if (ns_idx > -1) {
+			if (ns_idx < 10000) {
+				// Allocate buffer for prefix + '\0' + 4 digits
+				static char client_namespace_buf[sizeof(NAMESPACE_PREFIX) + 4];
+				snprintf(client_namespace_buf, sizeof client_namespace_buf, "%s%u", NAMESPACE_PREFIX, (uint16_t)ns_idx);
+				client_namespace = client_namespace_buf;
+
+			} else {
+				PX4_WARN("namespace index must be between 0 and 9999 inclusive; ignoring index-based namespace");
+			}
+		}
+	}
+
 #if defined(UXRCE_DDS_CLIENT_UDP)
 
 	if (port[0] == '\0') {
@@ -1092,7 +1152,7 @@ $ uxrce_dds_client start -t udp -h 127.0.0.1 -p 15555
 	PRINT_MODULE_USAGE_PARAM_INT('b', 0, 0, 3000000, "Baudrate (can also be p:<param_name>)", true);
 	PRINT_MODULE_USAGE_PARAM_STRING('h', nullptr, "<IP>", "Agent IP. If not provided, defaults to UXRCE_DDS_AG_IP", true);
 	PRINT_MODULE_USAGE_PARAM_INT('p', -1, 0, 65535, "Agent listening port. If not provided, defaults to UXRCE_DDS_PRT", true);
-	PRINT_MODULE_USAGE_PARAM_STRING('n', nullptr, nullptr, "Client DDS namespace", true);
+	PRINT_MODULE_USAGE_PARAM_STRING('n', nullptr, nullptr, "Client DDS namespace. If not provided but UXRCE_DDS_NS_IDX is between 0 and 9999 inclusive, then uav_ + UXRCE_DDS_NS_IDX will be used", true);
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 
 	return 0;

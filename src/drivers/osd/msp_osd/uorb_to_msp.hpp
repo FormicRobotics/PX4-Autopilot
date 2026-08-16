@@ -41,6 +41,8 @@
 // basic types
 #include <cmath>
 
+#include <px4_platform_common/px4_config.h>
+
 // UORB topic structs
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/sensor_combined.h>
@@ -53,10 +55,14 @@
 #include <uORB/topics/home_position.h>
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/vehicle_local_position.h>
+#include <uORB/topics/vehicle_odometry.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/input_rc.h>
 #include <uORB/topics/log_message.h>
-
+#include <uORB/topics/estimator_aid_source1d.h>
+#include <uORB/topics/total_arm_time.h>
+#include <uORB/topics/dds_flag.h>
+#include <uORB/topics/formic_ev_state_machine.h>
 // PX4 events interface
 #include <px4_platform_common/events.h>
 
@@ -91,6 +97,8 @@ msp_battery_state_t construct_BATTERY_STATE(const battery_status_s &battery_stat
 
 msp_rendor_battery_state_t construct_rendor_BATTERY_STATE(const battery_status_s &battery_status);
 
+msp_rendor_battery_state_t construct_rendor_BATTERY_FULL_VOLTAGE(const battery_status_s &battery_status);
+
 // construct an MSP_RAW_GPS struct
 msp_raw_gps_t construct_RAW_GPS(const sensor_gps_s &vehicle_gps_position,
 				const airspeed_validated_s &airspeed_validated);
@@ -123,13 +131,30 @@ msp_rendor_altitude_t construct_Rendor_ALTITUDE(const sensor_gps_s &vehicle_gps_
 msp_rendor_distanceToHome_t construct_rendor_distanceToHome(const home_position_s &home_position,
 		const vehicle_global_position_s &vehicle_global_position);
 
+		
 // construct an MSP_ESC_SENSOR_DATA struct
 msp_esc_sensor_data_dji_t construct_ESC_SENSOR_DATA();
-
+		
 // construct an MSP_RC struct
 msp_rc_t construct_MSP_RC(const input_rc_s &input_rc);
-
+		
 // construct an MSP_STATUS struct
 msp_status_t construct_MSP_STATUS(const vehicle_status_s &vehicle_status);
+
+msp_rendor_distance_sensor_t construct_rendor_DISTANCE_SENSOR(const estimator_aid_source1d_s &estimator_aid_src_rng_hgt);
+
+msp_baro_altitude_t construct_rendor_BARO_ALT(const estimator_aid_source1d_s &estimator_aid_src_baro_hgt);
+
+msp_rendor_total_arm_time_t construct_rendor_TOTAL_ARM_TIME(const total_arm_time_s &total_arm_time);
+
+msp_rendor_total_arm_time_t construct_rendor_TOTAL_ACTIVATED_TIME(const vehicle_status_s &vehicle_status);
+
+msp_rendor_formic_ring_t construct_rendor_FORMIC_RING(const dds_flag_s &dds_flag);
+
+msp_rendor_formic_crosshairs_t construct_rendor_FORMIC_CROSSHAIRS(int osd_format);
+
+msp_rendor_formic_vision_quality_t construct_rendor_FORMIC_VISION_QUALITY(const vehicle_odometry_s &vehicle_vision_odometry);
+
+msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_ev_state_machine_s &formic_ev_state_machine);
 
 } // namespace msp_osd

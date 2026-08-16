@@ -54,6 +54,11 @@
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_status.h>
+#include <uORB/topics/estimator_aid_source1d.h>
+#include <uORB/topics/total_arm_time.h>
+#include <uORB/topics/dds_flag.h>
+#include <uORB/topics/vehicle_odometry.h> // TODO: switch to vehicle_visual_odometry when available
+#include <uORB/topics/formic_ev_state_machine.h>
 
 #include "MspV1.hpp"
 #include "MessageDisplay/MessageDisplay.hpp"
@@ -97,7 +102,16 @@ enum SymbolIndex : uint8_t {
 	CROSSHAIRS		= 18,
 	AVG_CELL_VOLTAGE	= 19,
 	HORIZON_SIDEBARS	= 20,
-	POWER			= 21
+	POWER			= 21,
+	DISTANCE_SENSOR		= 22,
+	TOTAL_ARM_TIME		= 23,
+	FORMIC_RING		= 24,
+	BATTERY_FULL_VOLTAGE	= 25,
+	FORMIC_CROSSHAIRS	= 26,
+	TOTAL_ACTIVATED_TIME	= 27,
+	BARO_ALTITUDE		= 28,
+	FORMIC_VISION_QUALITY	= 29,
+	FORMIC_VIO_STATUS	= 30,
 };
 
 class MspOsd : public ModuleBase<MspOsd>, public ModuleParams, public px4::ScheduledWorkItem
@@ -162,11 +176,19 @@ private:
 	uORB::Subscription _vehicle_gps_position_sub{ORB_ID(vehicle_gps_position)};
 	uORB::Subscription _vehicle_local_position_sub{ORB_ID(vehicle_local_position)};
 	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
-
+	uORB::Subscription _estimator_aid_src_rng_hgt_sub{ORB_ID(estimator_aid_src_rng_hgt)};
+	uORB::Subscription _estimator_aid_src_baro_hgt_sub{ORB_ID(estimator_aid_src_baro_hgt)};
+	uORB::Subscription _total_arm_time_sub{ORB_ID(total_arm_time)};
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
+	uORB::Subscription _dds_flag_sub{ORB_ID(dds_flag)};
+	uORB::Subscription _vehicle_vision_odometry_sub{ORB_ID(vehicle_visual_odometry)}; // TODO: switch to vehicle_visual_odometry when available
+	uORB::Subscription _formic_ev_state_machine_sub{ORB_ID(formic_ev_state_machine)};
 
 	// local heartbeat
 	bool _heartbeat{false};
+	
+	// Track last config send time for periodic updates
+	hrt_abstime _last_config_send_time{0};
 
 	// parameters
 	DEFINE_PARAMETERS(
@@ -175,7 +197,8 @@ private:
 		(ParamInt<px4::params::OSD_SCROLL_RATE>) _param_osd_scroll_rate,
 		(ParamInt<px4::params::OSD_DWELL_TIME>) _param_osd_dwell_time,
 		(ParamInt<px4::params::OSD_LOG_LEVEL>) _param_osd_log_level,
-		(ParamInt<px4::params::OSD_RC_STICK>) _param_osd_rc_stick
+		(ParamInt<px4::params::OSD_RC_STICK>) _param_osd_rc_stick,
+		(ParamInt<px4::params::OSD_FORMAT>) _param_osd_format
 	)
 
 	// metadata

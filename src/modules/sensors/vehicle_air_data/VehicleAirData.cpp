@@ -293,6 +293,9 @@ void VehicleAirData::Run()
 						// calculate air density
 						const float air_density = getDensityFromPressureAndTemp(pressure_pa, ambient_temperature);
 
+						_last_baro_alt_meter = altitude;
+						_last_baro_alt_timestamp = timestamp_sample;
+
 						// populate vehicle_air_data with and publish
 						vehicle_air_data_s out{};
 						out.timestamp_sample = timestamp_sample;

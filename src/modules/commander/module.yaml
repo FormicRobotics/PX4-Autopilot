@@ -38,6 +38,9 @@ parameters:
                 8: Stabilized
                 12: Follow Me
                 13: Precision Land
+                16: Altitude Cruise
+                17: FormicAltHold
+                18: Turtle
                 100: External Mode 1
                 101: External Mode 2
                 102: External Mode 3

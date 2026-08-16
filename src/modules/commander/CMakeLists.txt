@@ -38,6 +38,21 @@ add_subdirectory(HealthAndArmingChecks)
 add_subdirectory(ModeUtil)
 add_subdirectory(MulticopterThrowLaunch)
 
+set(commander_depends
+	ArmAuthorization
+	circuit_breaker
+	failsafe
+	failure_detector
+	geo
+	health_and_arming_checks
+	hysteresis
+	mode_util
+	MulticopterThrowLaunch
+	sensor_calibration
+	world_magnetic_model
+	atmosphere
+)
+
 px4_add_module(
 	MODULE modules__commander
 	MAIN commander
@@ -64,18 +79,7 @@ px4_add_module(
 	MODULE_CONFIG
 		module.yaml
 	DEPENDS
-		ArmAuthorization
-		circuit_breaker
-		failsafe
-		failure_detector
-		geo
-		health_and_arming_checks
-		hysteresis
-		mode_util
-		MulticopterThrowLaunch
-		sensor_calibration
-		world_magnetic_model
-        atmosphere
+		${commander_depends}
 	)
 
 px4_add_unit_gtest(SRC mag_calibration_test.cpp LINKLIBS modules__commander)
