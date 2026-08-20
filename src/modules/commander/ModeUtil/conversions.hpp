@@ -70,7 +70,6 @@ static inline navigation_mode_t navigation_mode(uint8_t nav_state)
 
 	case vehicle_status_s::NAVIGATION_STATE_FORMIC_ALT_HOLD: return navigation_mode_t::formic_alt_hold;
 
-	case vehicle_status_s::NAVIGATION_STATE_TURTLE: return navigation_mode_t::turtle;
 
 	case vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF: return navigation_mode_t::auto_takeoff;
 
