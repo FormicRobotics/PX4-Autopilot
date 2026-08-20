@@ -38,7 +38,6 @@ add_subdirectory(HealthAndArmingChecks)
 add_subdirectory(ModeUtil)
 add_subdirectory(MulticopterThrowLaunch)
 
-# Conditionally add dshot dependency if the target exists (not available in all builds, e.g. SITL)
 set(commander_depends
 	ArmAuthorization
 	circuit_breaker
