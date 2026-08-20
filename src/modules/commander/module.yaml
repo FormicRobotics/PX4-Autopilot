@@ -1,7 +1,7 @@
 module_name: Commander
 parameters:
-    - group: Commander
-      definitions:
+  - group: Commander
+    definitions:
         COM_MODE${i}_HASH:
             description:
                 short: External mode identifier ${i}
@@ -38,6 +38,8 @@ parameters:
                 8: Stabilized
                 12: Follow Me
                 13: Precision Land
+                16: Altitude Cruise
+                17: FormicAltHold
                 100: External Mode 1
                 101: External Mode 2
                 102: External Mode 3

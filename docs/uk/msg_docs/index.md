@@ -74,10 +74,11 @@ Graphs showing how these are used [can be found here](../middleware/uorb_graph.m
 - [VehicleRatesSetpoint](VehicleRatesSetpoint.md)
 - [VehicleStatus](VehicleStatus.md) — Encodes the system state of the vehicle published by commander
 - [VtolVehicleStatus](VtolVehicleStatus.md) — VEHICLE_VTOL_STATE, should match 1:1 MAVLinks's MAV_VTOL_STATE
+- [Wind](Wind.md) — Wind estimate (from EKF2)
 
 ## Unversioned Messages
 
-- [ActionRequest](ActionRequest.md)
+- [ActionRequest](ActionRequest.md) — Action request for the vehicle's main state
 - [ActuatorArmed](ActuatorArmed.md)
 - [ActuatorControlsStatus](ActuatorControlsStatus.md)
 - [ActuatorOutputs](ActuatorOutputs.md)
@@ -85,7 +86,7 @@ Graphs showing how these are used [can be found here](../middleware/uorb_graph.m
 - [ActuatorTest](ActuatorTest.md)
 - [AdcReport](AdcReport.md)
 - [Airspeed](Airspeed.md) — Airspeed data from sensors
-- [AirspeedWind](AirspeedWind.md)
+- [AirspeedWind](AirspeedWind.md) — Wind estimate (from airspeed_selector)
 - [AutotuneAttitudeControlStatus](AutotuneAttitudeControlStatus.md)
 - [BatteryInfo](BatteryInfo.md) — Battery information
 - [ButtonEvent](ButtonEvent.md)
@@ -187,6 +188,7 @@ Graphs showing how these are used [can be found here](../middleware/uorb_graph.m
 - [NavigatorMissionItem](NavigatorMissionItem.md)
 - [NavigatorStatus](NavigatorStatus.md) — Current status of a Navigator mode
   The possible values of nav_state are defined in the VehicleStatus msg.
+- [NeuralControl](NeuralControl.md) — Neural control
 - [NormalizedUnsignedSetpoint](NormalizedUnsignedSetpoint.md)
 - [ObstacleDistance](ObstacleDistance.md) — Obstacle distances in front of the sensor.
 - [OffboardControlMode](OffboardControlMode.md) — Off-board control mode
@@ -227,10 +229,10 @@ Graphs showing how these are used [can be found here](../middleware/uorb_graph.m
 - [RoverPositionSetpoint](RoverPositionSetpoint.md) — Rover Position Setpoint
 - [RoverRateSetpoint](RoverRateSetpoint.md) — Rover Rate setpoint
 - [RoverRateStatus](RoverRateStatus.md) — Rover Rate Status
+- [RoverSpeedSetpoint](RoverSpeedSetpoint.md) — Rover Speed Setpoint
+- [RoverSpeedStatus](RoverSpeedStatus.md) — Rover Velocity Status
 - [RoverSteeringSetpoint](RoverSteeringSetpoint.md) — Rover Steering setpoint
 - [RoverThrottleSetpoint](RoverThrottleSetpoint.md) — Rover Throttle setpoint
-- [RoverVelocitySetpoint](RoverVelocitySetpoint.md) — Rover Velocity Setpoint
-- [RoverVelocityStatus](RoverVelocityStatus.md) — Rover Velocity Status
 - [Rpm](Rpm.md)
 - [RtlStatus](RtlStatus.md)
 - [RtlTimeEstimate](RtlTimeEstimate.md)
@@ -279,7 +281,7 @@ Graphs showing how these are used [can be found here](../middleware/uorb_graph.m
 - [UlogStreamAck](UlogStreamAck.md) — Ack a previously sent ulog_stream message that had
   the NEED_ACK flag set
 - [VehicleAcceleration](VehicleAcceleration.md)
-- [VehicleAirData](VehicleAirData.md)
+- [VehicleAirData](VehicleAirData.md) — Vehicle air data
 - [VehicleAngularAccelerationSetpoint](VehicleAngularAccelerationSetpoint.md)
 - [VehicleConstraints](VehicleConstraints.md) — Local setpoint constraints in NED frame
   setting something to NaN means that no limit is provided
@@ -296,13 +298,15 @@ Graphs showing how these are used [can be found here](../middleware/uorb_graph.m
 - [VehicleTorqueSetpoint](VehicleTorqueSetpoint.md)
 - [VelocityLimits](VelocityLimits.md) — Velocity and yaw rate limits for a multicopter position slow mode only
 - [WheelEncoders](WheelEncoders.md)
-- [Wind](Wind.md)
 - [YawEstimatorStatus](YawEstimatorStatus.md)
 - [AirspeedValidatedV0](AirspeedValidatedV0.md)
 - [ArmingCheckReplyV0](ArmingCheckReplyV0.md)
+- [ArmingCheckRequestV0](ArmingCheckRequestV0.md) — Arming check request.
 - [BatteryStatusV0](BatteryStatusV0.md) — Battery status
 - [EventV0](EventV0.md) — this message is required here in the msg_old folder because other msg are depending on it
   Events interface
 - [HomePositionV0](HomePositionV0.md) — GPS home position in WGS84 coordinates.
 - [VehicleAttitudeSetpointV0](VehicleAttitudeSetpointV0.md)
+- [VehicleLocalPositionV0](VehicleLocalPositionV0.md) — Fused local position in NED.
+  The coordinate system origin is the vehicle position at the time when the EKF2-module was started.
 - [VehicleStatusV0](VehicleStatusV0.md) — Encodes the system state of the vehicle published by commander

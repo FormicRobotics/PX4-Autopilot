@@ -98,6 +98,21 @@ PARAM_DEFINE_FLOAT(TRIM_YAW, 0.0f);
 PARAM_DEFINE_INT32(COM_DL_LOSS_T, 10);
 
 /**
+ * Position-wait timeout
+ *
+ * Maximum number of seconds to wait for a position solution before falling
+ * back to ALTCTL when a position-requiring mode (e.g. Position Control) is
+ * requested but no position fix is yet available.
+ *
+ * @group Commander
+ * @unit s
+ * @min 5
+ * @max 120
+ * @increment 1
+ */
+PARAM_DEFINE_INT32(COM_POS_WAIT_LIM, 30);
+
+/**
  * High Latency Datalink loss time threshold
  *
  * After this amount of seconds without datalink the data link lost mode triggers
@@ -190,7 +205,7 @@ PARAM_DEFINE_INT32(COM_HOME_IN_AIR, 0);
 PARAM_DEFINE_INT32(COM_RC_IN_MODE, 3);
 
 /**
- * RC input arm/disarm command duration
+ * Manual control input arm/disarm command duration
  *
  * The default value of 1000 requires the stick to be held in the arm or disarm position for 1 second.
  *
@@ -421,9 +436,9 @@ PARAM_DEFINE_INT32(COM_ARM_MAG_ANG, 60);
 PARAM_DEFINE_INT32(COM_ARM_MAG_STR, 2);
 
 /**
- * Enable RC stick override of auto and/or offboard modes
+ * Enable manual control stick override
  *
- * When RC stick override is enabled, moving the RC sticks more than COM_RC_STICK_OV
+ * When enabled, moving the sticks more than COM_RC_STICK_OV
  * immediately gives control back to the pilot by switching to Position mode and
  * if position is unavailable Altitude mode.
  * Note: Only has an effect on multicopters, and VTOLs in multicopter mode.
@@ -437,7 +452,7 @@ PARAM_DEFINE_INT32(COM_ARM_MAG_STR, 2);
 PARAM_DEFINE_INT32(COM_RC_OVERRIDE, 1);
 
 /**
- * RC stick override threshold
+ * Stick override threshold
  *
  * If COM_RC_OVERRIDE is enabled and the joystick input is moved more than this threshold
  * the autopilot the pilot takes over control.
@@ -460,18 +475,6 @@ PARAM_DEFINE_FLOAT(COM_RC_STICK_OV, 30.0f);
  * @boolean
  */
 PARAM_DEFINE_INT32(COM_ARM_MIS_REQ, 0);
-
-/**
- * Position mode navigation loss response
- *
- * This sets the flight mode that will be used if navigation accuracy is no longer adequate for position control in manual Position mode.
- *
- * @value 0 Altitude mode
- * @value 1 Land mode (descend)
- *
- * @group Commander
- */
-PARAM_DEFINE_INT32(COM_POSCTL_NAVL, 0);
 
 /**
  * Require arm authorization to arm
@@ -601,11 +604,10 @@ PARAM_DEFINE_INT32(COM_TAKEOFF_ACT, 0);
 PARAM_DEFINE_INT32(NAV_DLL_ACT, 0);
 
 /**
- * Set RC loss failsafe mode
+ * Set manual control loss failsafe mode
  *
- * The RC loss failsafe will only be entered after a timeout,
- * set by COM_RC_LOSS_T in seconds. If RC input checks have been disabled
- * by setting the COM_RC_IN_MODE param it will not be triggered.
+ * The manual control loss failsafe will only be entered after a timeout,
+ * set by COM_RC_LOSS_T in seconds.
  *
  * @value 1 Hold mode
  * @value 2 Return mode
@@ -620,17 +622,18 @@ PARAM_DEFINE_INT32(NAV_DLL_ACT, 0);
 PARAM_DEFINE_INT32(NAV_RCL_ACT, 2);
 
 /**
- * RC loss exceptions
+ * Manual control loss exceptions
  *
  * Specify modes where manual control loss is ignored and no failsafe is triggered.
  * External modes requiring stick input will still failsafe.
  *
  * @min 0
- * @max 15
+ * @max 31
  * @bit 0 Mission
  * @bit 1 Hold
  * @bit 2 Offboard
  * @bit 3 External Mode
+ * @bit 4 Altitude Cruise
  * @group Commander
  */
 PARAM_DEFINE_INT32(COM_RCL_EXCEPT, 0);
@@ -847,6 +850,18 @@ PARAM_DEFINE_INT32(COM_ARM_HFLT_CHK, 1);
 PARAM_DEFINE_INT32(COM_ARM_ODID, 0);
 
 /**
+ * DDS connection required for arming
+ *
+ * Require DDS (Data Distribution Service) connection before allowing arming.
+ *
+ * @group Commander
+ * @value 0 Disabled (DDS connection not required)
+ * @value 1 Warning only (allow arming but warn if DDS not connected)
+ * @value 2 Required (prevent arming if DDS not connected)
+ */
+PARAM_DEFINE_INT32(COM_ARM_DDS, 0);
+
+/**
  * Enforced delay between arming and further navigation
  *
  * The minimal time from arming the motors until moving the vehicle is possible is COM_SPOOLUP_TIME seconds.
@@ -1008,6 +1023,8 @@ PARAM_DEFINE_FLOAT(COM_ARM_BAT_MIN, -1.f);
  */
 PARAM_DEFINE_INT32(COM_THROW_EN, 0);
 
+
+
 /**
  * Minimum speed for the throw start
  *
@@ -1049,3 +1066,24 @@ PARAM_DEFINE_INT32(COM_FLTT_LOW_ACT, 0);
  *
  */
 PARAM_DEFINE_INT32(COM_MODE_ARM_CHK, 0);
+
+
+
+/**
+ * Minimum SLAM and MSCKF feature count threshold
+ *
+ * Below this value the VIO estimate is considered poor. The VIO fusion is
+ * suspended and the system prepares to dead-reckon for a short period.
+ * If the feature count recovers, the current flight mode is maintained and
+ * VIO fusion resumes. If features do not return, the mode switches to
+ * Altitude Hold. The counter is reset once valid data is received again.
+ *
+ * Set to 0 to disable.
+ *
+ * @group Commander
+ * @min 0
+ */
+PARAM_DEFINE_INT32(FORMIC_VIO_MF, 5);
+
+
+

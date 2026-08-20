@@ -75,7 +75,7 @@
 [submodule "Tools/simulation/gz"]
 	path = Tools/simulation/gz
 	url = https://github.com/PX4/PX4-gazebo-models.git
-	branch = main
+	branch = formic
 [submodule "boards/modalai/voxl2/libfc-sensor-api"]
 	path = boards/modalai/voxl2/libfc-sensor-api
 	url = https://gitlab.com/voxl-public/voxl-sdk/core-libs/libfc-sensor-api.git
@@ -92,6 +92,14 @@
 [submodule "test/fuzztest"]
 	path = test/fuzztest
 	url = https://github.com/google/fuzztest.git
+	branch = main
 [submodule "src/lib/tensorflow_lite_micro/tflite_micro"]
 	path = src/lib/tensorflow_lite_micro/tflite_micro
 	url = https://github.com/PX4/tflite-micro.git
+	branch = main
+[submodule "src/drivers/ins/microstrain/mip_sdk"]
+	path = src/drivers/ins/microstrain/mip_sdk
+	url = https://github.com/PX4/LORD-MicroStrain_mip_sdk.git
+[submodule "src/drivers/ins/sbgecom/sbgECom"]
+	path = src/drivers/ins/sbgecom/sbgECom
+	url = https://github.com/PX4/sbgECom.git

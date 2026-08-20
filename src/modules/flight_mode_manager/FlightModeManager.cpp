@@ -32,6 +32,7 @@
  ****************************************************************************/
 
 #include "FlightModeManager.hpp"
+#include "px4_platform_common/log.h"
 
 #include <lib/mathlib/mathlib.h>
 #include <lib/matrix/matrix/math.hpp>
@@ -154,6 +155,8 @@ void FlightModeManager::start_flight_task()
 	bool task_failure = false;
 	const bool nav_state_descend = (_vehicle_status_sub.get().nav_state == vehicle_status_s::NAVIGATION_STATE_DESCEND);
 
+	const bool nav_state_formic_alt_hold = (_vehicle_status_sub.get().nav_state == vehicle_status_s::NAVIGATION_STATE_FORMIC_ALT_HOLD);
+
 	// Follow me
 	if (_vehicle_status_sub.get().nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_FOLLOW_TARGET) {
 		found_some_task = true;
@@ -216,7 +219,7 @@ void FlightModeManager::start_flight_task()
 		case 4:
 		default:
 			if (_param_mpc_pos_mode.get() != 4) {
-				PX4_ERR("MPC_POS_MODE %" PRId32 " invalid, resetting", _param_mpc_pos_mode.get());
+				// PX4_ERR("MPC_POS_MODE %" PRId32 " invalid, resetting", _param_mpc_pos_mode.get());
 				_param_mpc_pos_mode.set(4);
 				_param_mpc_pos_mode.commit();
 			}
@@ -229,8 +232,8 @@ void FlightModeManager::start_flight_task()
 		matching_task_running = matching_task_running && !task_failure;
 	}
 
-	// Manual altitude control
-	if ((_vehicle_status_sub.get().nav_state == vehicle_status_s::NAVIGATION_STATE_ALTCTL) || task_failure) {
+	// Manual altitude control (includes FormicAltHold mode)
+	if ((_vehicle_status_sub.get().nav_state == vehicle_status_s::NAVIGATION_STATE_ALTCTL) || nav_state_formic_alt_hold || task_failure) {
 		found_some_task = true;
 		FlightTaskError error = FlightTaskError::NoError;
 
@@ -241,9 +244,28 @@ void FlightModeManager::start_flight_task()
 
 		case 3:
 		default:
-			error = switchTask(FlightTaskIndex::ManualAltitudeSmoothVel);
+			if (_param_mpc_pos_mode.get() != 3) {
+				// PX4_ERR("MPC_POS_MODE %" PRId32 " invalid for altitude mode, resetting", _param_mpc_pos_mode.get());
+				_param_mpc_pos_mode.set(3);
+				_param_mpc_pos_mode.commit();
+			}
+
+			const FlightTaskIndex altitude_task = nav_state_formic_alt_hold ? FlightTaskIndex::FormicAltHold : FlightTaskIndex::ManualAltitudeSmoothVel;
+			error = switchTask(altitude_task);
+
 			break;
 		}
+
+		task_failure = (error != FlightTaskError::NoError);
+		matching_task_running = matching_task_running && !task_failure;
+	}
+
+	// Altitude cruise
+	if (_vehicle_status_sub.get().nav_state == vehicle_status_s::NAVIGATION_STATE_ALTITUDE_CRUISE) {
+		found_some_task = true;
+		FlightTaskError error = FlightTaskError::NoError;
+
+		error = switchTask(FlightTaskIndex::AltitudeCruise);
 
 		task_failure = (error != FlightTaskError::NoError);
 		matching_task_running = matching_task_running && !task_failure;

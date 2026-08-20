@@ -279,6 +279,10 @@ then
 	attitude_estimator_q start
 fi
 
+# Formic EV watchdog. Always started; it self-gates on FORMIC_WDEV_EN (idles when 0),
+# so the parameter can be toggled at runtime without changing the startup script.
+formic_watchdog_ev start
+
 if ! pwm_out_sim start -m sim
 then
 	tune_control play error
@@ -323,6 +327,11 @@ then
 fi
 
 uxrce_dds_client start -t udp -p $uxrce_dds_port $uxrce_dds_ns
+
+if param greater -s ZENOH_ENABLE 0
+then
+	zenoh start
+fi
 
 if param greater -s MNT_MODE_IN -1
 then

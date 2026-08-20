@@ -109,6 +109,10 @@ const uint16_t osd_crosshairs_pos = 2319;
 const uint16_t osd_main_batt_voltage_pos = 2073;
 const uint16_t osd_current_draw_pos = 2103;
 
+const uint16_t osd_distance_sensor_pos = 2482;
+const uint16_t osd_total_arm_time_pos = 2484;
+const uint16_t osd_total_activated_time_pos = 2485;
+
 
 const uint16_t osd_numerical_vario_pos = LOCATION_HIDDEN;
 
@@ -186,6 +190,10 @@ void MspOsd::SendConfig()
 	msp_osd_config.osd_power_pos = enabled(SymbolIndex::POWER) ? osd_power_pos : LOCATION_HIDDEN;
 	msp_osd_config.osd_avg_cell_voltage_pos = enabled(SymbolIndex::AVG_CELL_VOLTAGE) ? osd_avg_cell_voltage_pos :
 			LOCATION_HIDDEN;
+
+	msp_osd_config.osd_distance_sensor_pos = enabled(SymbolIndex::DISTANCE_SENSOR) ? osd_distance_sensor_pos : LOCATION_HIDDEN;
+	msp_osd_config.osd_total_arm_time_pos = enabled(SymbolIndex::TOTAL_ARM_TIME) ? osd_total_arm_time_pos : LOCATION_HIDDEN;
+	msp_osd_config.osd_total_activated_time_pos = enabled(SymbolIndex::TOTAL_ACTIVATED_TIME) ? osd_total_activated_time_pos : LOCATION_HIDDEN;
 
 	// the location of our crosshairs can change
 	msp_osd_config.osd_crosshairs_pos = LOCATION_HIDDEN;
@@ -266,6 +274,8 @@ void MspOsd::Run()
 
 		if (_msp_fd < 0) {
 			_performance_data.initialization_problems = true;
+			PX4_ERR("Failed to open MSP OSD device %s: %d (%s)", _device, errno, strerror(errno));
+			PX4_ERR("Check if another service (e.g. MAVLink) is using this port");
 			return;
 		}
 
@@ -331,7 +341,7 @@ void MspOsd::Run()
 		char msg[sizeof(msp_name_t) + 5] = {0};
 		int index = 0;
 		msg[index++] = MSP_DP_WRITE_STRING;
-		msg[index++] = 0x02; // row position
+		msg[index++] = 0x05; // row position
 		msg[index++] = 0x14; // colum position
 		msg[index++] = 0;		// Icon attr
 		msg[index++] = 0x03; // Icon index >
@@ -365,6 +375,12 @@ void MspOsd::Run()
 
 		const auto msg = msp_osd::construct_rendor_BATTERY_STATE(battery_status);
 		this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_battery_state_t));
+
+		// Always display full battery voltage (like single cell voltage)
+		if (battery_status.connected && battery_status.voltage_v > 0.0f) {
+			const auto msg_full_voltage = msp_osd::construct_rendor_BATTERY_FULL_VOLTAGE(battery_status);
+			this->Send(MSP_CMD_DISPLAYPORT, &msg_full_voltage, sizeof(msp_rendor_battery_state_t));
+		}
 
 	}
 
@@ -405,19 +421,19 @@ void MspOsd::Run()
 	}
 
 	// MSP_ATTITUDE
-	{
-		vehicle_attitude_s vehicle_attitude{};
-		_vehicle_attitude_sub.copy(&vehicle_attitude);
+	// {
+	// 	vehicle_attitude_s vehicle_attitude{};
+	// 	_vehicle_attitude_sub.copy(&vehicle_attitude);
 
-		{
-			const auto msg = msp_osd::construct_rendor_PITCH(vehicle_attitude);
-			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_pitch_t));
-		}
-		{
-			const auto msg = msp_osd::construct_rendor_ROLL(vehicle_attitude);
-			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_roll_t));
-		}
-	}
+	// 	{
+	// 		const auto msg = msp_osd::construct_rendor_PITCH(vehicle_attitude);
+	// 		this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_pitch_t));
+	// 	}
+	// 	{
+	// 		const auto msg = msp_osd::construct_rendor_ROLL(vehicle_attitude);
+	// 		this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_roll_t));
+	// 	}
+	// }
 
 
 	// MSP_ALTITUDE
@@ -431,7 +447,101 @@ void MspOsd::Run()
 		if (enabled(SymbolIndex::ALTITUDE)) {
 			const auto msg = msp_osd::construct_Rendor_ALTITUDE(vehicle_gps_position, vehicle_local_position);
 
-			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_altitude_t));
+			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_altitude_t));
+		}
+	}
+
+	// MSP_DISTANCE_SENSOR
+	{
+		estimator_aid_source1d_s estimator_aid_src_rng_hgt{};
+		_estimator_aid_src_rng_hgt_sub.copy(&estimator_aid_src_rng_hgt);
+
+		if (enabled(SymbolIndex::DISTANCE_SENSOR)) {
+			const auto msg = msp_osd::construct_rendor_DISTANCE_SENSOR(estimator_aid_src_rng_hgt);
+
+			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_distance_sensor_t));
+		}
+	}
+	// MSP_BARO_ALTITUDE
+	{
+		estimator_aid_source1d_s estimator_aid_src_baro_hgt{};
+		_estimator_aid_src_baro_hgt_sub.copy(&estimator_aid_src_baro_hgt);
+
+		if (enabled(SymbolIndex::BARO_ALTITUDE)) {
+			const auto msg = msp_osd::construct_rendor_BARO_ALT(estimator_aid_src_baro_hgt);
+
+			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_baro_altitude_t));
+		}
+	}
+
+	// MSP_TOTAL_ARM_TIME
+	{
+		total_arm_time_s total_arm_time{};
+		_total_arm_time_sub.copy(&total_arm_time);
+
+		if (enabled(SymbolIndex::TOTAL_ARM_TIME)) {
+			const auto msg = msp_osd::construct_rendor_TOTAL_ARM_TIME(total_arm_time);
+
+			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_total_arm_time_t));
+		}
+	}
+
+	// MSP_TOTAL_ACTIVATED_TIME
+	{
+		vehicle_status_s vehicle_status{};
+		_vehicle_status_sub.copy(&vehicle_status);
+
+		if (enabled(SymbolIndex::TOTAL_ACTIVATED_TIME)) {
+			const auto msg = msp_osd::construct_rendor_TOTAL_ACTIVATED_TIME(vehicle_status);
+
+			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_total_arm_time_t));
+		}
+	}
+
+	// MSP_FORMIC_RING
+	{
+		dds_flag_s dds_flag{};
+		_dds_flag_sub.copy(&dds_flag);
+
+		if (enabled(SymbolIndex::FORMIC_RING)) {
+			const auto msg = msp_osd::construct_rendor_FORMIC_RING(dds_flag);
+
+			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formic_ring_t));
+		}
+	}
+
+	// MSP_FORMIC_VISION_QUALITY
+	{
+		vehicle_odometry_s vehicle_odometry{};
+		_vehicle_vision_odometry_sub.copy(&vehicle_odometry);
+		if (enabled(SymbolIndex::FORMIC_VISION_QUALITY)) {
+			const auto msg = msp_osd::construct_rendor_FORMIC_VISION_QUALITY(vehicle_odometry);
+
+			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formic_vision_quality_t));
+		}
+
+
+
+	}
+
+	// MSP_FORMIC_VIO_STATUS
+	{
+		formic_ev_state_machine_s formic_ev_state_machine{};
+		_formic_ev_state_machine_sub.copy(&formic_ev_state_machine);
+
+		if (enabled(SymbolIndex::FORMIC_VIO_STATUS)) {
+			const auto msg = msp_osd::construct_rendor_FORMIC_VIO_STATUS(formic_ev_state_machine);
+
+			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formicc_vio_status_t));
+		}
+	}
+
+	// MSP_FORMIC_CROSSHAIRS
+	{
+		if (enabled(SymbolIndex::FORMIC_CROSSHAIRS)) {
+			const auto msg = msp_osd::construct_rendor_FORMIC_CROSSHAIRS(_param_osd_format.get());
+
+			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formic_crosshairs_t));
 		}
 	}
 

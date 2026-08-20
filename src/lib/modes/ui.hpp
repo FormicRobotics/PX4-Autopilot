@@ -47,15 +47,18 @@ static inline uint32_t getValidNavStates()
 {
 	return (1u << vehicle_status_s::NAVIGATION_STATE_MANUAL) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_ALTCTL) |
+	       (1u << vehicle_status_s::NAVIGATION_STATE_ALTITUDE_CRUISE) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_POSCTL) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_AUTO_LOITER) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_AUTO_RTL) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_POSITION_SLOW) |
+	       (1u << vehicle_status_s::NAVIGATION_STATE_TURTLE) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_ACRO) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_TERMINATION) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_OFFBOARD) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_STAB) |
+	       (1u << vehicle_status_s::NAVIGATION_STATE_FORMIC_ALT_HOLD) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_AUTO_LAND) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_AUTO_FOLLOW_TARGET) |
@@ -74,8 +77,8 @@ const char *const nav_state_names[vehicle_status_s::NAVIGATION_STATE_MAX] = {
 	"Hold",
 	"Return",
 	"Position Slow",
-	"7: unallocated",
-	"8: unallocated",
+	"Turtle",
+	"Altitude Cruise",
 	"9: unallocated",
 	"Acro",
 	"11: UNUSED",
@@ -83,7 +86,7 @@ const char *const nav_state_names[vehicle_status_s::NAVIGATION_STATE_MAX] = {
 	"Termination",
 	"Offboard",
 	"Stabilized",
-	"16: UNUSED2",
+	"FormicAltHold",
 	"Takeoff",
 	"Land",
 	"Follow Target",
@@ -96,8 +99,7 @@ const char *const nav_state_names[vehicle_status_s::NAVIGATION_STATE_MAX] = {
 	"External 4",
 	"External 5",
 	"External 6",
-	"External 7",
-	"External 8",
+	"External 7"
 };
 
 /**
@@ -107,6 +109,8 @@ static inline bool isAdvanced(uint8_t nav_state)
 {
 	switch (nav_state) {
 	case vehicle_status_s::NAVIGATION_STATE_ALTCTL: return false;
+
+	case vehicle_status_s::NAVIGATION_STATE_ALTITUDE_CRUISE: return false;
 
 	case vehicle_status_s::NAVIGATION_STATE_POSCTL: return false;
 

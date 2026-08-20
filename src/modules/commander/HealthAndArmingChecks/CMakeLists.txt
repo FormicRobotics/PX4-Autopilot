@@ -41,6 +41,7 @@ px4_add_library(health_and_arming_checks
 	checks/baroCheck.cpp
 	checks/batteryCheck.cpp
 	checks/cpuResourceCheck.cpp
+	checks/ddsCheck.cpp
 	checks/distanceSensorChecks.cpp
 	checks/opticalFlowCheck.cpp
 	checks/escCheck.cpp
@@ -67,6 +68,7 @@ px4_add_library(health_and_arming_checks
 	checks/systemCheck.cpp
 	checks/vtolCheck.cpp
 	checks/windCheck.cpp
+	checks/vioCheck.cpp
 
 	checks/externalChecks.cpp
 )

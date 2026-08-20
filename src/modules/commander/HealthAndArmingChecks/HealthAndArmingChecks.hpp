@@ -45,6 +45,7 @@
 #include "checks/armPermissionCheck.hpp"
 #include "checks/baroCheck.hpp"
 #include "checks/cpuResourceCheck.hpp"
+#include "checks/ddsCheck.hpp"
 #include "checks/distanceSensorChecks.hpp"
 #include "checks/opticalFlowCheck.hpp"
 #include "checks/escCheck.hpp"
@@ -73,6 +74,7 @@
 #include "checks/offboardCheck.hpp"
 #include "checks/openDroneIDCheck.hpp"
 #include "checks/externalChecks.hpp"
+#include "checks/vioCheck.hpp"
 
 class HealthAndArmingChecks : public ModuleParams
 {
@@ -130,6 +132,7 @@ private:
 	ArmPermissionChecks _arm_permission_checks;
 	BaroChecks _baro_checks;
 	CpuResourceChecks _cpu_resource_checks;
+	DdsChecks _dds_checks;
 	DistanceSensorChecks _distance_sensor_checks;
 	OpticalFlowCheck _optical_flow_check;
 	EscChecks _esc_checks;
@@ -157,6 +160,9 @@ private:
 	RcAndDataLinkChecks _rc_and_data_link_checks;
 	VtolChecks _vtol_checks;
 	OffboardChecks _offboard_checks;
+	VioChecks _vio_checks;
+
+
 #ifndef CONSTRAINED_FLASH
 	ExternalChecks _external_checks;
 #endif
@@ -170,6 +176,7 @@ private:
 		&_arm_permission_checks,
 		&_baro_checks,
 		&_cpu_resource_checks,
+		&_dds_checks,
 		&_distance_sensor_checks,
 		&_optical_flow_check,
 		&_esc_checks,
@@ -197,5 +204,6 @@ private:
 		&_flight_time_checks,
 		&_rc_and_data_link_checks,
 		&_vtol_checks,
+		&_vio_checks,
 	};
 };
