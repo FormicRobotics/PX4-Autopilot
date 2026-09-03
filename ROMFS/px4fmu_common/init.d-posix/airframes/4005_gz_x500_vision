@@ -8,3 +8,9 @@
 PX4_SIM_MODEL=${PX4_SIM_MODEL:=x500_vision}
 
 . ${R}etc/init.d-posix/airframes/4001_gz_x500
+
+# Do not inject the Gazebo odometry straight into uORB. The odometry publisher
+# plugin keeps publishing on /model/x500_vision_<instance>/odometry and
+# .../odometry_with_covariance, so an external VIO pipeline has to bring the
+# data back in itself.
+param set-default SIM_GZ_EN_ODOM 0
