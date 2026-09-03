@@ -129,6 +129,9 @@ publications:
   type: px4_msgs::msg::CameraTrigger
   rate_limit: 100
 
+- topic: /fmu/out/camera_capture
+  type: px4_msgs::msg::CameraCapture
+
 - topic: /fmu/out/formic_ev_state_machine
   type: px4_msgs::msg::FormicEvStateMachine
   rate_limit: 10
