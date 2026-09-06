@@ -74,7 +74,6 @@
 #include "checks/offboardCheck.hpp"
 #include "checks/openDroneIDCheck.hpp"
 #include "checks/externalChecks.hpp"
-#include "checks/vioCheck.hpp"
 
 class HealthAndArmingChecks : public ModuleParams
 {
@@ -160,7 +159,6 @@ private:
 	RcAndDataLinkChecks _rc_and_data_link_checks;
 	VtolChecks _vtol_checks;
 	OffboardChecks _offboard_checks;
-	VioChecks _vio_checks;
 
 
 #ifndef CONSTRAINED_FLASH
@@ -204,6 +202,5 @@ private:
 		&_flight_time_checks,
 		&_rc_and_data_link_checks,
 		&_vtol_checks,
-		&_vio_checks,
 	};
 };

@@ -277,10 +277,7 @@ set(msg_files
 	ddsFlag.msg
 	totalArmTime.msg
 	FormicEvStateMachine.msg
-	FormicVioJetson.msg
 	FormicPosReq.msg
-	FormicVioFeatures.msg
-	FeaturesFilter.msg
 )
 
 list(SORT msg_files)
