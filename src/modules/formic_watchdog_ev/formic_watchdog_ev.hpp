@@ -10,6 +10,7 @@
 #include <uORB/Publication.hpp>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/vehicle_odometry.h>
+#include <uORB/topics/formic_vehicle_odometry.h>
 #include <uORB/topics/estimator_aid_source1d.h>
 #include <uORB/topics/estimator_aid_source2d.h>
 #include <uORB/topics/formic_ev_state_machine.h>

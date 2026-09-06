@@ -270,6 +270,7 @@ set(msg_files
 	versioned/VehicleLandDetected.msg
 	versioned/VehicleLocalPosition.msg
 	versioned/VehicleOdometry.msg
+	versioned/FormicVehicleOdometry.msg
 	versioned/VehicleRatesSetpoint.msg
 	versioned/VehicleStatus.msg
 	versioned/VtolVehicleStatus.msg
