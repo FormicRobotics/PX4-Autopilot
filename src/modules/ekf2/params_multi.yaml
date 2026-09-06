@@ -5,8 +5,7 @@ parameters:
     EKF2_MULTI_IMU:
       description:
         short: Multi-EKF IMUs
-        long: Maximum number of IMUs to use for Multi-EKF. Set 0 to disable. Requires
-          SENS_IMU_MODE 0.
+        long: Maximum number of IMUs to use for Multi-EKF. Set 0 to disable. Requires SENS_IMU_MODE 0.
       type: int32
       default: 0
       reboot_required: true
@@ -15,10 +14,16 @@ parameters:
     EKF2_MULTI_MAG:
       description:
         short: Multi-EKF Magnetometers
-        long: Maximum number of magnetometers to use for Multi-EKF. Set 0 to disable.
-          Requires SENS_MAG_MODE 0.
+        long: Maximum number of magnetometers to use for Multi-EKF. Set 0 to disable. Requires SENS_MAG_MODE 0.
       type: int32
       default: 0
       reboot_required: true
       min: 0
       max: 4
+    EKF2_MULTI_VIS:
+      description:
+        short: Multi-EKF Visual-Inertial Odometry
+        long: Enable or disable Multi-EKF Visual-Inertial Odometry. Set 0 to disable, 1 to enable.
+      type: boolean
+      default: false
+      reboot_required: true

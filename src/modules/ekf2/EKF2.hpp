@@ -131,7 +131,7 @@ class EKF2 final : public ModuleParams, public px4::ScheduledWorkItem
 {
 public:
 	EKF2() = delete;
-	EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode);
+	EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode, bool vision_enabled = true);
 	~EKF2() override;
 
 	/** @see ModuleBase */
@@ -162,10 +162,9 @@ public:
 private:
 
 	static constexpr uint8_t MAX_NUM_IMUS = 4;
-	static constexpr uint8_t MAX_NUM_MAGS = 4;
+	static constexpr uint8_t MAX_NUM_MAGS = 2;
 
 	void Run() override;
-
 	void AdvertiseTopics();
 	void VerifyParams();
 
@@ -270,6 +269,7 @@ private:
 	static constexpr float sq(float x) { return x * x; };
 
 	const bool _replay_mode{false};			///< true when we use replay data from a log
+	const bool _vision_enabled;			///< true if this instance may fuse external vision
 	const bool _multi_mode;
 	int _instance{0};
 
