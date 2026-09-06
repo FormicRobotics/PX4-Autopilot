@@ -145,6 +145,10 @@ publications:
 - topic: /fmu/out/distance_sensor
   type: px4_msgs::msg::DistanceSensor
 
+- topic: /fmu/out/vehicle_visual_odometry
+  type: px4_msgs::msg::VehicleOdometry
+
+
 # Create uORB::Publication
 subscriptions:
 # - topic: /fmu/in/register_ext_component_request
@@ -203,7 +207,7 @@ subscriptions:
   type: px4_msgs::msg::VehicleOdometry
 
 - topic: /fmu/in/formic_odom
-  type: px4_msgs::msg::VehicleOdometry
+  type: px4_msgs::msg::FormicVehicleOdometry
 
 - topic: /fmu/in/vehicle_command
   type: px4_msgs::msg::VehicleCommand

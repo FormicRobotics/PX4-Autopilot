@@ -22,7 +22,7 @@ void FormicWatchdogEv::parameters_update(bool force)
 
 FormicWatchdogEv::FormicWatchdogEv() :
 	ModuleParams(nullptr),
-	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::lp_default)
+	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::nav_and_controllers)
 {
 	parameters_update(true);
 
@@ -30,7 +30,7 @@ FormicWatchdogEv::FormicWatchdogEv() :
 
 bool FormicWatchdogEv::init()
 {
-	ScheduleOnInterval(16_ms);
+	ScheduleOnInterval(1_ms);
 	parameters_update();
 
 	int32_t sens_imu_mode = 1;
@@ -65,11 +65,11 @@ void FormicWatchdogEv::Run()
 
 	handle_pos_req_user_intention(); // check if the commander requested to be in a position mode (e.g. by moving the AUX switch or by requesting a position mode while EV was not healthy, which triggers the position request as a fallback)
 
-	vehicle_odometry_s odometry{};
+	formic_vehicle_odometry_s formic_odometry{};
 
-	if (_odometry_sub_formic.update(&odometry)) {
+	if (_odometry_sub_formic.update(&formic_odometry)) {
 		_last_ev_timestamp = hrt_absolute_time();
-
+		vehicle_odometry_s &odometry = formic_odometry.odometry;
 		resetcounter(odometry); // (relies on _ev_data_arrived being fresh)
 		copy_odometry_msg(odometry);
 		}

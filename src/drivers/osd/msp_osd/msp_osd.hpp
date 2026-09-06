@@ -58,7 +58,7 @@
 #include <uORB/topics/total_arm_time.h>
 #include <uORB/topics/dds_flag.h>
 #include <uORB/topics/vehicle_odometry.h> // TODO: switch to vehicle_visual_odometry when available
-#include <uORB/topics/formic_ev_state_machine.h>
+// #include <uORB/topics/formic_ev_state_machine.h>
 
 #include "MspV1.hpp"
 #include "MessageDisplay/MessageDisplay.hpp"
@@ -182,7 +182,7 @@ private:
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	uORB::Subscription _dds_flag_sub{ORB_ID(dds_flag)};
 	uORB::Subscription _vehicle_vision_odometry_sub{ORB_ID(vehicle_visual_odometry)}; // TODO: switch to vehicle_visual_odometry when available
-	uORB::Subscription _formic_ev_state_machine_sub{ORB_ID(formic_ev_state_machine)};
+	// uORB::Subscription _formic_ev_state_machine_sub{ORB_ID(formic_ev_state_machine)};
 
 	// local heartbeat
 	bool _heartbeat{false};

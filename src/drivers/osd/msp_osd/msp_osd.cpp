@@ -525,16 +525,16 @@ void MspOsd::Run()
 	}
 
 	// MSP_FORMIC_VIO_STATUS
-	{
-		formic_ev_state_machine_s formic_ev_state_machine{};
-		_formic_ev_state_machine_sub.copy(&formic_ev_state_machine);
+	// {
+	// 	formic_ev_state_machine_s formic_ev_state_machine{};
+	// 	_formic_ev_state_machine_sub.copy(&formic_ev_state_machine);
 
-		if (enabled(SymbolIndex::FORMIC_VIO_STATUS)) {
-			const auto msg = msp_osd::construct_rendor_FORMIC_VIO_STATUS(formic_ev_state_machine);
+	// 	if (enabled(SymbolIndex::FORMIC_VIO_STATUS)) {
+	// 		const auto msg = msp_osd::construct_rendor_FORMIC_VIO_STATUS(formic_ev_state_machine);
 
-			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formicc_vio_status_t));
-		}
-	}
+	// 		this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formicc_vio_status_t));
+	// 	}
+	// }
 
 	// MSP_FORMIC_CROSSHAIRS
 	{
