@@ -129,10 +129,6 @@ publications:
   type: px4_msgs::msg::CameraTrigger
   rate_limit: 100
 
-- topic: /fmu/out/formic_ev_state_machine
-  type: px4_msgs::msg::FormicEvStateMachine
-  rate_limit: 10
-
 - topic: /fmu/out/sensor_baro
   type: px4_msgs::msg::SensorBaro
 
@@ -147,7 +143,6 @@ publications:
 
 - topic: /fmu/out/vehicle_visual_odometry
   type: px4_msgs::msg::VehicleOdometry
-
 
 # Create uORB::Publication
 subscriptions:
