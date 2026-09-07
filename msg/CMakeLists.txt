@@ -278,6 +278,7 @@ set(msg_files
 	ddsFlag.msg
 	totalArmTime.msg
 	FormicEvStateMachine.msg
+	FormicEvFlag.msg
 	FormicPosReq.msg
 )
 
