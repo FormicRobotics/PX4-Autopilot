@@ -145,6 +145,15 @@ publications:
 - topic: /fmu/out/distance_sensor
   type: px4_msgs::msg::DistanceSensor
 
+- topic: /fmu/out/estimator_odometry
+  type: px4_msgs::msg::VehicleOdometry
+  rate_limit: 50
+  instances: 2
+
+- topic: /fmu/out/estimator_selector_status
+  type: px4_msgs::msg::EstimatorSelectorStatus
+  rate_limit: 5
+
 # Create uORB::Publication
 subscriptions:
 # - topic: /fmu/in/register_ext_component_request

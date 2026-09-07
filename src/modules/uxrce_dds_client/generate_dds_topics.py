@@ -104,12 +104,35 @@ def process_message_type(msg_type):
 
 merged_em_globals['namespace'] = namespace
 
+def expand_multi_instance_publications(pubs):
+    # A publication with 'instances: N' fans out into N per-instance entries,
+    # one uORB instance each, published on distinct DDS topics ("<topic>_<i>")
+    # since the message itself carries no instance field to tell them apart.
+    expanded = []
+    for p in pubs:
+        instances = p.pop('instances', 1)
+        orb_topic_simple = p['topic'].split('/')[-1]
+        if instances > 1:
+            for i in range(instances):
+                pi = dict(p)
+                pi['topic'] = f"{p['topic']}_{i}"
+                pi['instance'] = i
+                expanded.append((pi, orb_topic_simple))
+        else:
+            p['instance'] = 0
+            expanded.append((p, orb_topic_simple))
+    return expanded
+
 pubs_not_empty = msg_map['publications'] is not None
 if pubs_not_empty:
-    for p in msg_map['publications']:
+    expanded_pubs = expand_multi_instance_publications(msg_map['publications'])
+    for p, orb_topic_simple in expanded_pubs:
         process_message_type(p)
+        # process_message_type derives topic_simple from the (possibly
+        # instance-suffixed) DDS topic; restore it to the real uORB topic name.
+        p['topic_simple'] = orb_topic_simple
 
-merged_em_globals['publications'] = msg_map['publications'] if pubs_not_empty else []
+merged_em_globals['publications'] = [p for p, _ in expanded_pubs] if pubs_not_empty else []
 
 subs_not_empty = msg_map['subscriptions'] is not None
 if subs_not_empty:
