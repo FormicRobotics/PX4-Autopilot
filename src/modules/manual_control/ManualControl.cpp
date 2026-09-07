@@ -41,6 +41,7 @@ ManualControl::ManualControl() :
 	ModuleParams(nullptr),
 	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::hp_default)
 {
+	_param_handle_mc_airmode = param_find("MC_AIRMODE");
 	updateParams();
 }
 
@@ -360,6 +361,25 @@ void ManualControl::updateParams()
 					events::send(events::ID("commander_airmode_requires_no_arm_gesture"), {events::Log::Error, events::LogInternal::Disabled},
 						     "Yaw Airmode requires disabling the stick arm gesture");
 				}
+			}
+		}
+	}
+
+	// MC_AIRMODE: force airmode off on ground contact / ground effect, restore the user's setting once airborne again
+	if (_param_handle_mc_airmode != PARAM_INVALID) {
+		if (!_airmode_forced_off) {
+			param_get(_param_handle_mc_airmode, &_user_airmode);
+		}
+
+		if (_user_airmode != 0) {
+			vehicle_land_detected_s land_detected{};
+			_vehicle_land_detected_sub.copy(&land_detected);
+			const bool should_force_off = land_detected.ground_contact || land_detected.in_ground_effect;
+
+			if (should_force_off != _airmode_forced_off) {
+				int32_t new_airmode = should_force_off ? 0 : _user_airmode;
+				param_set(_param_handle_mc_airmode, &new_airmode);
+				_airmode_forced_off = should_force_off;
 			}
 		}
 	}

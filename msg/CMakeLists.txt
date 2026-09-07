@@ -281,6 +281,7 @@ set(msg_files
 	FormicPosReq.msg
 	FormicVioFeatures.msg
 	FeaturesFilter.msg
+	land_debug.msg
 )
 
 list(SORT msg_files)

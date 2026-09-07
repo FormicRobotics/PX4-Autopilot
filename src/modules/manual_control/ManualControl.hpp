@@ -43,6 +43,7 @@
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
 #include <uORB/topics/action_request.h>
 #include <uORB/topics/landing_gear.h>
+#include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/manual_control_switches.h>
 #include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/parameter_update.h>
@@ -107,6 +108,7 @@ private:
 	uORB::SubscriptionCallbackWorkItem _manual_control_switches_sub{this, ORB_ID(manual_control_switches)};
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
+	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
 
 	uORB::Publication<action_request_s> _action_request_pub{ORB_ID(action_request)};
 	uORB::Publication<landing_gear_s> _landing_gear_pub{ORB_ID(landing_gear)};
@@ -141,6 +143,9 @@ private:
 	uint8_t _system_id{1};
 	bool _rotary_wing{false};
 	bool _vtol{false};
+	param_t _param_handle_mc_airmode{PARAM_INVALID};
+	int32_t _user_airmode{0};
+	bool _airmode_forced_off{false};
 
 	DEFINE_PARAMETERS(
 		(ParamInt<px4::params::COM_RC_IN_MODE>) _param_com_rc_in_mode,

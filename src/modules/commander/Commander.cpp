@@ -2368,7 +2368,7 @@
 	///////add by naor ////////////////
 	// Tick the position-stable counter: if a pos-required mode is pending,
 	// this counts valid-position iterations and switches after POS_STABLE_THRESHOLD.
-	 _user_mode_intention.tick();
+	//  _user_mode_intention.tick(); // timout to the pos 
 	///////add by naor ////////////////
 
 	 const uint8_t prev_nav_state = _vehicle_status.nav_state;

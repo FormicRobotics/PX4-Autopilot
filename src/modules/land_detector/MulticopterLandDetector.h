@@ -47,6 +47,8 @@
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_thrust_setpoint.h>
 #include <uORB/topics/takeoff_status.h>
+#include <uORB/topics/land_debug.h>
+#include <uORB/Publication.hpp>
 
 #include "LandDetector.h"
 
@@ -111,6 +113,7 @@ private:
 
 	uORB::Subscription _vehicle_control_mode_sub{ORB_ID(vehicle_control_mode)};
 	uORB::Subscription _takeoff_status_sub{ORB_ID(takeoff_status)};
+	uORB::Publication<land_debug_s> _land_debug_sub{ORB_ID(land_debug)};
 
 	hrt_abstime _hover_thrust_estimate_last_valid{0};
 	bool _hover_thrust_estimate_valid{false};
