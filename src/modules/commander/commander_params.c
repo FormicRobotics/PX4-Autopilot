@@ -100,17 +100,15 @@ PARAM_DEFINE_INT32(COM_DL_LOSS_T, 10);
 /**
  * Position-wait timeout
  *
- * Maximum number of seconds to wait for a position solution before falling
- * back to ALTCTL when a position-requiring mode (e.g. Position Control) is
- * requested but no position fix is yet available.
+ * Maximum number of seconds to wait for a the ekf of the vio and the ekf_ecl to converge.
  *
  * @group Commander
  * @unit s
- * @min 5
- * @max 120
+ * @min 1
+ * @max 20
  * @increment 1
  */
-PARAM_DEFINE_INT32(COM_POS_WAIT_LIM, 30);
+PARAM_DEFINE_INT32(COM_POS_WAIT_LIM, 5);
 
 /**
  * High Latency Datalink loss time threshold

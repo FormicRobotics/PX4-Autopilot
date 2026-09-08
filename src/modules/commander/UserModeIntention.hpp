@@ -39,7 +39,7 @@
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/estimator_aid_source1d.h>
 #include <uORB/topics/formic_pos_req.h>
-#include <uORB/topics/formic_ev_state_machine.h>	
+#include <uORB/topics/formic_ev_flag.h>
 
 #include "HealthAndArmingChecks/HealthAndArmingChecks.hpp"
 
@@ -132,5 +132,5 @@ private:
 	uint8_t _pending_nav_state{UINT8_MAX};        ///< mode waiting for position lock (UINT8_MAX = none)
 	hrt_abstime _pos_wait_start_us{0};            ///< hrt timestamp when the pending request was parked (0 = not active)
 	uORB::Publication<formic_pos_req_s> _formic_pos_req_pub{ORB_ID(formic_pos_req)}; ///< Formic position request publisher
-	uORB::Subscription _formic_ev_state_machine_sub{ORB_ID(formic_ev_state_machine)}; ///< Sub to check if EV yaw is fused (used when EKF2_IMU_CTRL has EV yaw enabled)
+	uORB::Subscription _formic_ev_flag_sub{ORB_ID(formic_ev_flag)}; ///< Sub to check the EV flag status
 };
