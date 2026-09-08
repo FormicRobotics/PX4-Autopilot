@@ -13,14 +13,30 @@
 #include <uORB/topics/formic_vehicle_odometry.h>
 #include <uORB/topics/estimator_aid_source1d.h>
 #include <uORB/topics/estimator_aid_source2d.h>
-#include <uORB/topics/formic_ev_state_machine.h>
 #include <uORB/topics/formic_ev_flag.h>
 #include <uORB/topics/formic_pos_req.h>
-
+#include <cstring>
 // Drivers
 #include <drivers/drv_hrt.h>
 
 
+
+enum class VIOStatus {
+    INACTIVE,      // No estimator running. No pose.
+    INITIALIZING,  // Trying to initialize. No usable estimate yet - not a failure.
+    VALIDATING,    // Initialized, on probation. Poses publish but are provisional.
+    NOMINAL,       // Measurements are carrying the filter.
+    DEGRADED,      // Propagation is starting to dominate. Recoverable.
+    DIVERGED,      // The estimate is not trustworthy in any frame.
+    RESETTING,     // Tearing down and re-initializing. No pose.
+};
+
+enum class Dstate : uint8_t {
+    NONE = 0,
+    VisionON = 1,
+    DEGRADED = 2,
+    DR = 3
+};
 
 
 class FormicWatchdogEv : public ModuleBase<FormicWatchdogEv>,
@@ -44,13 +60,13 @@ private:
 	void parameters_update(bool force = false);
 	void copy_odometry_msg(vehicle_odometry_s &odometry);
 	bool check_EV_aid_src_heading(float vio_yaw, float estimator_yaw); // returns true if EV yaw aid data was fused this cycle; sets _heading_alligned_with_ev
-	// void resetcounter(vehicle_odometry_s &odometry);
 	bool resetcounter_req(vehicle_odometry_s &odometry);
 	void no_EvData(); // need to get the EV data dropout status
 	float get_yaw_from_quat(const vehicle_odometry_s &odometry);
 	void handle_pos_req_user_intention();
 	bool check_EV_aid_src_pos(const float vio_pos[2], const float estimator_pos[2]); // returns true if EV pos aid data was fused this cycle; sets pos_alligned_with_ev
 	void publish_msg();
+	void parse_status(const char status[16]);
 
 	// --- Subscriptions ---
 	uORB::Subscription _parameter_update_sub{ORB_ID(parameter_update)};
@@ -62,23 +78,22 @@ private:
 
 	// --- Publications ---
 	uORB::Publication<vehicle_odometry_s> _odometry_pub{ORB_ID(vehicle_visual_odometry)};
-	uORB::Publication<formic_ev_state_machine_s> _formic_state_machine_pub{ORB_ID(formic_ev_state_machine)};
 	uORB::Publication<formic_ev_flag_s> _formic_ev_flag_pub{ORB_ID(formic_ev_flag)};
 
 	// --- EV stream state ---
 	bool _ev_hpos_enabled{false};      // EKF2_EV_CTRL horizontal position fusion bit
+	bool _ev_yaw_enabled{false};       // EKF2_EV_CTRL yaw fusion bit
 	hrt_abstime _last_ev_timestamp{0}; // last EV sample arrival time (drives dropout detection)
-
-	// --- Heading / position reset counter state ---
 	hrt_abstime _last_reset_time{0};  // last increment time (for the reset throttle)
 	bool _heading_alligned_with_ev{false}; // true while the EKF heading is aligned with the EV yaw
 	bool _pos_alligned_with_ev{false}; // true while the EKF heading is aligned with the EV yaw
 	bool _ekfs_conv {false};
 	bool _data_arrived{false}; // true if new EV data has arrived this cycle
 
-	// --- State machine output ---
 	bool _pos_requested{false}; // latched formic_pos_req.pos_req: true while a position mode is requested
 	int reset_counter = 0;
+
+	Dstate _dstate{Dstate::NONE};
 
 	DEFINE_PARAMETERS(
 		(ParamInt<px4::params::FORMIC_WDEV_EN>) _param_formic_wdev_en,  // use this module
