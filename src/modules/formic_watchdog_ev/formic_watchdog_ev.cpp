@@ -17,6 +17,8 @@ void FormicWatchdogEv::parameters_update(bool force)
 	}
 
 	_ev_hpos_enabled = (_param_ekf2_ev_ctrl.get() & (1 << 0)) != 0;
+	_ev_yaw_enabled = (_param_ekf2_ev_ctrl.get() & (1 << 3)) != 0;
+
 }
 
 
@@ -71,9 +73,12 @@ void FormicWatchdogEv::Run()
 		_last_ev_timestamp = hrt_absolute_time();
 		vehicle_odometry_s &odometry = formic_odometry.odometry;
 		copy_odometry_msg(odometry);
-		}
+		parse_status(formic_odometry.status);
+		
+	}
 
 
+	publish_msg();
 	no_EvData(); // updates _ev_data_arrived every cycle
 }
 
@@ -84,7 +89,15 @@ void FormicWatchdogEv::Run()
 void FormicWatchdogEv::copy_odometry_msg(vehicle_odometry_s &odometry)
 
 {
-	odometry.reset_counter = resetcounter_req(odometry) ? ++reset_counter : reset_counter;
+	// Always re-evaluate EKF/EV convergence this cycle, but only bump reset_counter
+	// at most once every 500 ms so we don't force an EKF reset-to-vision on every sample.
+
+	if (resetcounter_req(odometry) && (_last_reset_time == 0 || hrt_elapsed_time(&_last_reset_time) >= 500_ms)) {
+		++reset_counter;
+		_last_reset_time = hrt_absolute_time();
+	}
+
+	odometry.reset_counter = reset_counter;
 	_odometry_pub.publish(odometry);
 }
 
@@ -160,85 +173,47 @@ bool FormicWatchdogEv::resetcounter_req(vehicle_odometry_s &odometry){
 
 	const float raw_yaw      = get_yaw_from_quat(odometry);  // EV (VIO) yaw
 	const float estimtor_yaw = get_yaw_from_quat(esti_odom); // EKF yaw
-	const bool yaw_data_valid = check_EV_aid_src_heading(raw_yaw, estimtor_yaw);
+	const bool yaw_data_valid = _ev_yaw_enabled ? check_EV_aid_src_heading(raw_yaw, estimtor_yaw) : (_heading_alligned_with_ev = true, true);
 	const bool pos_data_valid = _ev_hpos_enabled  ? check_EV_aid_src_pos(odometry.position, esti_odom.position) : (_pos_alligned_with_ev = true, true);
+
 	_ekfs_conv = yaw_data_valid && pos_data_valid
 			     && _heading_alligned_with_ev
 			     && _pos_alligned_with_ev;
 
-	return _ekfs_conv;
+	return !_ekfs_conv;
 } 
+
+
 
 
 void FormicWatchdogEv::publish_msg()
 {
-	formic_ev_flag_s _formic_ev_flag;
-	_formic_ev_flag.ev_data_arrived = _data_arrived;
-	_formic_ev_flag.ekfs_converged = _ekfs_conv;
-	_formic_ev_flag.heading_ok = _heading_alligned_with_ev;
-	_formic_ev_flag.pos_ok = _pos_alligned_with_ev;
-	_formic_ev_flag.timestamp = hrt_absolute_time();
-	_formic_ev_flag_pub.publish(_formic_ev_flag);
+        formic_ev_flag_s _formic_ev_flag{};
+        _formic_ev_flag.timestamp = hrt_absolute_time();
+        _formic_ev_flag.ev_data_arrived = _data_arrived;
+        _formic_ev_flag.ekfs_converged = _ekfs_conv;
+        _formic_ev_flag.heading_ok = _heading_alligned_with_ev;
+        _formic_ev_flag.pos_ok = _pos_alligned_with_ev;
+        
+        // Convert enum class to uint8 for uORB message
+        _formic_ev_flag.dstate = static_cast<uint8_t>(_dstate);
 
+        _formic_ev_flag_pub.publish(_formic_ev_flag);
 }
-
-// void FormicWatchdogEv::resetcounter(vehicle_odometry_s &odometry)
-// {
-// 	vehicle_odometry_s esti_odom{};
-
-// 	if (!_estimtor_odometry_sub.copy(&esti_odom)) {
-// 		return;
-// 	}
-
-// 	const float raw_yaw      = get_yaw_from_quat(odometry);  // EV (VIO) yaw
-// 	const float estimtor_yaw = get_yaw_from_quat(esti_odom); // EKF yaw
-
-
-// 	if (!_formic_ev_flag.ev_data_arrived) {
-// 		reset_counter = 0;
-// 		_last_reset_time = 0;
-// 		at_reset_counter = true;
-// 		return;
-// 	}
-
-// 	const bool yaw_data_valid = check_EV_aid_src_heading(raw_yaw, estimtor_yaw);
-// 	const bool pos_data_valid = _ev_hpos_enabled  ? handle_pos_reset(odometry.position, esti_odom.position) : (_formic_state.pos_alligned_with_ev = true, true);
-	
-// 	if (!at_reset_counter) {
-// 		return;
-// 	}
-
-// 	const bool aligned = yaw_data_valid && pos_data_valid
-// 			     && _heading_alligned_with_ev
-// 			     && _formic_state.pos_alligned_with_ev;
-
-// 	if (aligned) {
-// 		at_reset_counter = false;
-// 		return;
-// 	}
-
-// 	if (_last_reset_time != 0 && hrt_elapsed_time(&_last_reset_time) < 2_s) {
-// 		return;
-// 	}
-
-// 	reset_counter++;
-// 	_last_reset_time = hrt_absolute_time();
-// }
-
-
-
 
 
 void FormicWatchdogEv::no_EvData()
 {
 	/* Determine if there has been a dropout in the EV (Extended Visual) data stream. */
 	if ((_last_ev_timestamp == 0) ||
-	    ((hrt_absolute_time() - _last_ev_timestamp) > 700_ms)) {
+
+	    ((hrt_absolute_time() - _last_ev_timestamp) > (hrt_abstime)(_param_ekf2_noaid_tout.get() * 2))) {
 		_data_arrived = false;
 		_heading_alligned_with_ev = false;
 		_pos_alligned_with_ev = false;
 		_last_reset_time = 0; // clear the 3 s reset throttle timer
 		reset_counter = 0; // reset the EV reset counter at dropout, so the next session starts from zero
+
 
 	}
 	else {
@@ -272,8 +247,16 @@ int FormicWatchdogEv::task_spawn(int argc, char *argv[])
 }
 
 
-
-
+void FormicWatchdogEv::parse_status(const char status[16])
+{
+    if (strncmp(status, "INACTIVE", 16) == 0) {
+        _dstate = Dstate::VisionON;
+    } else if (strncmp(status, "DEGRADED", 16) == 0) { // Fixed: added '== 0'
+        _dstate = Dstate::DEGRADED;
+    } else {
+        _dstate = Dstate::NONE;
+    }
+}
 
 
 FormicWatchdogEv *FormicWatchdogEv::instantiate(int argc, char *argv[])

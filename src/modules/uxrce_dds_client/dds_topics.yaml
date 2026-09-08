@@ -144,6 +144,10 @@ publications:
 - topic: /fmu/out/vehicle_visual_odometry
   type: px4_msgs::msg::VehicleOdometry
 
+- topic: /fmu/out/formic_ev_flag
+  type: px4_msgs::msg::FormicEvFlag
+  rate_limit: 10
+
 # Create uORB::Publication
 subscriptions:
 # - topic: /fmu/in/register_ext_component_request
@@ -154,7 +158,6 @@ subscriptions:
 
 # - topic: /fmu/in/mode_completed
 #   type: px4_msgs::msg::ModeCompleted
-
 
 # - topic: /fmu/in/goto_setpoint
 # type: px4_msgs::msg::GotoSetpoint
