@@ -50,7 +50,7 @@ private:
 	float get_yaw_from_quat(const vehicle_odometry_s &odometry);
 	void handle_pos_req_user_intention();
 	bool check_EV_aid_src_pos(const float vio_pos[2], const float estimator_pos[2]); // returns true if EV pos aid data was fused this cycle; sets pos_alligned_with_ev
-	void publish_msg(formic_ev_flag_s &flag);
+	void publish_msg();
 
 	// --- Subscriptions ---
 	uORB::Subscription _parameter_update_sub{ORB_ID(parameter_update)};
@@ -73,12 +73,10 @@ private:
 	hrt_abstime _last_reset_time{0};  // last increment time (for the reset throttle)
 	bool _heading_alligned_with_ev{false}; // true while the EKF heading is aligned with the EV yaw
 	bool _pos_alligned_with_ev{false}; // true while the EKF heading is aligned with the EV yaw
-	bool at_reset_counter {true}; // true while in the RESET phase: keep resetting until the heading aligns with the EV, then flips false to start error checking (re-armed each session on EV dropout)
-	bool ekfs_conv {true};
+	bool _ekfs_conv {false};
+	bool _data_arrived{false}; // true if new EV data has arrived this cycle
 
 	// --- State machine output ---
-	formic_ev_state_machine_s _formic_state{};
-	formic_ev_flag_s _formic_ev_flag{};
 	bool _pos_requested{false}; // latched formic_pos_req.pos_req: true while a position mode is requested
 	int reset_counter = 0;
 

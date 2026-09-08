@@ -142,19 +142,14 @@ void UserModeIntention::tick()
 		return;
 	}
 
-	bool valid_pos = false;
-	if (_formic_ev_state_machine_sub.updated()) {
-		formic_ev_state_machine_s watchdog_ev{};
-		_formic_ev_state_machine_sub.copy(&watchdog_ev);
-		valid_pos = watchdog_ev.status == 4; // pipline_status::VALID_POS
-
-	}
+	formic_ev_flag_s formic_ev_flag{};
+	_formic_ev_flag_sub.copy(&formic_ev_flag);
 
 	const bool pos_ok = _health_and_arming_checks.canRun(_pending_nav_state);
 
 	// Only require EV yaw fused when EV is actually being used (EKF2_IMU_CTRL != 0 and EV data arriving).
 	// If position comes from GPS or another non-EV source, ev_yaw_available is false and we skip the EV gate.
-	if (pos_ok && valid_pos) {
+	if (pos_ok && formic_ev_flag.ekfs_converged) {
 		const float elapsed_s = hrt_elapsed_time(&_pos_wait_start_us) * 1e-6f;
 		PX4_INFO("Position available - switching to pending mode %d after %.1f s", _pending_nav_state, (double)elapsed_s);
 		const uint8_t mode = _pending_nav_state;
@@ -167,7 +162,7 @@ void UserModeIntention::tick()
 	} else {
 		publish_formic_pos_req(true);
 
-		int32_t limit_s = 30;
+		int32_t limit_s = 2;
 		param_get(_param_pos_wait_limit, &limit_s);
 		const hrt_abstime limit_us = (hrt_abstime)limit_s * 1_s;
 

@@ -161,23 +161,26 @@ bool FormicWatchdogEv::resetcounter_req(vehicle_odometry_s &odometry){
 	const float raw_yaw      = get_yaw_from_quat(odometry);  // EV (VIO) yaw
 	const float estimtor_yaw = get_yaw_from_quat(esti_odom); // EKF yaw
 	const bool yaw_data_valid = check_EV_aid_src_heading(raw_yaw, estimtor_yaw);
-	const bool pos_data_valid = _ev_hpos_enabled  ? check_EV_aid_src_pos(odometry.position, esti_odom.position) : (_formic_ev_flag.pos_ok = true, true);
-	ekfs_conv = yaw_data_valid && pos_data_valid
+	const bool pos_data_valid = _ev_hpos_enabled  ? check_EV_aid_src_pos(odometry.position, esti_odom.position) : (_pos_alligned_with_ev = true, true);
+	_ekfs_conv = yaw_data_valid && pos_data_valid
 			     && _heading_alligned_with_ev
 			     && _pos_alligned_with_ev;
 
-	return ekfs_conv;
-
-
-
-
-
-
-
-
-
+	return _ekfs_conv;
 } 
 
+
+void FormicWatchdogEv::publish_msg()
+{
+	formic_ev_flag_s _formic_ev_flag;
+	_formic_ev_flag.ev_data_arrived = _data_arrived;
+	_formic_ev_flag.ekfs_converged = _ekfs_conv;
+	_formic_ev_flag.heading_ok = _heading_alligned_with_ev;
+	_formic_ev_flag.pos_ok = _pos_alligned_with_ev;
+	_formic_ev_flag.timestamp = hrt_absolute_time();
+	_formic_ev_flag_pub.publish(_formic_ev_flag);
+
+}
 
 // void FormicWatchdogEv::resetcounter(vehicle_odometry_s &odometry)
 // {
@@ -231,18 +234,16 @@ void FormicWatchdogEv::no_EvData()
 	/* Determine if there has been a dropout in the EV (Extended Visual) data stream. */
 	if ((_last_ev_timestamp == 0) ||
 	    ((hrt_absolute_time() - _last_ev_timestamp) > 700_ms)) {
-		_formic_ev_flag.ev_data_arrived = false;		
-		_formic_state.error_find = false; // dropout = end of session: clear latched error so the next session may use EV
+		_data_arrived = false;
 		_heading_alligned_with_ev = false;
-		_formic_state.pos_alligned_with_ev = false;
+		_pos_alligned_with_ev = false;
 		_last_reset_time = 0; // clear the 3 s reset throttle timer
-		at_reset_counter = true; // re-arm the reset phase: next session resets until the heading aligns, then checks for errors
 		reset_counter = 0; // reset the EV reset counter at dropout, so the next session starts from zero
 
 	}
 	else {
 		// Fresh EV data has arrived within the timeout window.
-		_formic_ev_flag.ev_data_arrived = true;
+		_data_arrived = true;
 	}
 }
 
