@@ -33,7 +33,6 @@
 
 #pragma once
 
-#include <parameters/param.h>
 #include <uORB/Subscription.hpp>
 #include <uORB/Publication.hpp>
 #include <uORB/topics/vehicle_status.h>
@@ -128,7 +127,6 @@ private:
 	bool _had_mode_change{false}; ///< true if there was a mode change call since the last getHadModeChangeAndClear()
 
 	///////add by naor ////////////////
-	param_t _param_pos_wait_limit{PARAM_INVALID}; ///< handle for COM_POS_WAIT_LIM parameter (seconds)
 	uint8_t _pending_nav_state{UINT8_MAX};        ///< mode waiting for position lock (UINT8_MAX = none)
 	hrt_abstime _pos_wait_start_us{0};            ///< hrt timestamp when the pending request was parked (0 = not active)
 	uORB::Publication<formic_pos_req_s> _formic_pos_req_pub{ORB_ID(formic_pos_req)}; ///< Formic position request publisher
