@@ -509,32 +509,17 @@ void MspOsd::Run()
 			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formic_ring_t));
 		}
 	}
-
-	// MSP_FORMIC_VISION_QUALITY
-	{
-		vehicle_odometry_s vehicle_odometry{};
-		_vehicle_vision_odometry_sub.copy(&vehicle_odometry);
-		if (enabled(SymbolIndex::FORMIC_VISION_QUALITY)) {
-			const auto msg = msp_osd::construct_rendor_FORMIC_VISION_QUALITY(vehicle_odometry);
-
-			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formic_vision_quality_t));
-		}
-
-
-
-	}
-
 	// MSP_FORMIC_VIO_STATUS
-	// {
-	// 	formic_ev_state_machine_s formic_ev_state_machine{};
-	// 	_formic_ev_state_machine_sub.copy(&formic_ev_state_machine);
+	{
+		formic_ev_flag_s formic_ev_flag{};
+		_formic_ev_flag_sub.copy(&formic_ev_flag);
 
-	// 	if (enabled(SymbolIndex::FORMIC_VIO_STATUS)) {
-	// 		const auto msg = msp_osd::construct_rendor_FORMIC_VIO_STATUS(formic_ev_state_machine);
+		if (enabled(SymbolIndex::FORMIC_VIO_STATUS)) {
+			const auto msg = msp_osd::construct_rendor_FORMIC_VIO_STATUS(formic_ev_flag);
 
-	// 		this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formicc_vio_status_t));
-	// 	}
-	// }
+			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formicc_vio_status_t));
+		}
+	}
 
 	// MSP_FORMIC_CROSSHAIRS
 	{

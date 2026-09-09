@@ -41,9 +41,6 @@ UserModeIntention::UserModeIntention(const vehicle_status_s &vehicle_status,
 	: _vehicle_status(vehicle_status), _health_and_arming_checks(health_and_arming_checks),
 	  _handler(handler)
 {
-	///////add by naor ////////////////
-	_param_pos_wait_limit = param_find("COM_POS_WAIT_LIM");
-	///////add by naor ////////////////
 }
 
 bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource source, bool allow_fallback,
@@ -74,17 +71,14 @@ bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource
 
 		///////add by naor ////////////////
 		// If change failed because position is not yet valid, park the request.
-		// tick() will retry once position has been stable for POS_STABLE_THRESHOLD iterations.
+		// tick() will retry, with no timeout, until position becomes valid and EKF converges.
 		if (!allow_change && modeRequiresPosition(user_intended_nav_state)) {
-			// Only (re)start the wait timer when this is a *fresh* pending request.
-			// Re-issuing the same request while already pending (failsafe re-forcing a
-			// mode, a GCS resending the command, ...) must NOT reset the clock, otherwise
-			// the timeout never elapses and pos_req stays latched at 1.
+			// Only (re)start the wait clock when this is a *fresh* pending request, so that
+			// re-issuing the same request while already pending (failsafe re-forcing a mode,
+			// a GCS resending the command, ...) doesn't reset the elapsed-time log below.
 			if (_pending_nav_state != user_intended_nav_state) {
 				_pos_wait_start_us = hrt_absolute_time();
-				int32_t limit = 30;
-				param_get(_param_pos_wait_limit, &limit);
-				PX4_INFO("Mode %d requires position - waiting up to %d s for solution", user_intended_nav_state, (int)limit);
+				PX4_INFO("Mode %d requires position - waiting for solution", user_intended_nav_state);
 			}
 
 			_pending_nav_state = user_intended_nav_state;
@@ -160,18 +154,9 @@ void UserModeIntention::tick()
 		publish_formic_pos_req(true);
 
 	} else {
+		// Keep retrying with no timeout: stay parked in the pending mode and keep
+		// requesting position until pos_ok && ekfs_converged becomes true.
 		publish_formic_pos_req(true);
-
-		int32_t limit_s = 2;
-		param_get(_param_pos_wait_limit, &limit_s);
-		const hrt_abstime limit_us = (hrt_abstime)limit_s * 1_s;
-
-		if (hrt_elapsed_time(&_pos_wait_start_us) >= limit_us) {
-			_pending_nav_state = UINT8_MAX;
-			_pos_wait_start_us = 0;
-			change(vehicle_status_s::NAVIGATION_STATE_ALTCTL, ModeChangeSource::User, false, true);
-			publish_formic_pos_req(false);
-		}
 	}
 }
 

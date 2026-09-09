@@ -98,7 +98,17 @@ void FormicWatchdogEv::copy_odometry_msg(vehicle_odometry_s &odometry)
 	}
 
 	odometry.reset_counter = reset_counter;
-	_odometry_pub.publish(odometry);
+	odometry.timestamp_sample = hrt_absolute_time(); // not ok - vlad 
+
+	if (_pos_requested) {
+		_odometry_pub.publish(odometry);
+	}
+	else {
+		_heading_alligned_with_ev = false;
+		_pos_alligned_with_ev = false;
+		_ekfs_conv = false;
+	}
+
 }
 
 
@@ -176,12 +186,16 @@ bool FormicWatchdogEv::resetcounter_req(vehicle_odometry_s &odometry){
 	const bool yaw_data_valid = _ev_yaw_enabled ? check_EV_aid_src_heading(raw_yaw, estimtor_yaw) : (_heading_alligned_with_ev = true, true);
 	const bool pos_data_valid = _ev_hpos_enabled  ? check_EV_aid_src_pos(odometry.position, esti_odom.position) : (_pos_alligned_with_ev = true, true);
 
-	_ekfs_conv = yaw_data_valid && pos_data_valid
+	const bool converged_now = yaw_data_valid && pos_data_valid
 			     && _heading_alligned_with_ev
 			     && _pos_alligned_with_ev;
 
+	// Latch: once converged, stay converged through transient misalignment blips.
+	// Only a session stop (copy_odometry_msg) or an EV dropout (no_EvData) clears it.
+	_ekfs_conv = _ekfs_conv || converged_now;
+
 	return !_ekfs_conv;
-} 
+}
 
 
 
@@ -194,8 +208,6 @@ void FormicWatchdogEv::publish_msg()
         _formic_ev_flag.ekfs_converged = _ekfs_conv;
         _formic_ev_flag.heading_ok = _heading_alligned_with_ev;
         _formic_ev_flag.pos_ok = _pos_alligned_with_ev;
-        
-        // Convert enum class to uint8 for uORB message
         _formic_ev_flag.dstate = static_cast<uint8_t>(_dstate);
 
         _formic_ev_flag_pub.publish(_formic_ev_flag);
@@ -207,18 +219,35 @@ void FormicWatchdogEv::no_EvData()
 	/* Determine if there has been a dropout in the EV (Extended Visual) data stream. */
 	if ((_last_ev_timestamp == 0) ||
 
-	    ((hrt_absolute_time() - _last_ev_timestamp) > (hrt_abstime)(_param_ekf2_noaid_tout.get() * 2))) {
+	    ((hrt_absolute_time() - _last_ev_timestamp) > (hrt_abstime)(_param_ekf2_noaid_tout.get() * 1.5))) {
 		_data_arrived = false;
 		_heading_alligned_with_ev = false;
 		_pos_alligned_with_ev = false;
+		_ekfs_conv = false; // convergence can't hold once the EV stream has dropped out
 		_last_reset_time = 0; // clear the 3 s reset throttle timer
 		reset_counter = 0; // reset the EV reset counter at dropout, so the next session starts from zero
-
+		_dstate = Dstate::NONE; // EV dropout state
 
 	}
 	else {
 		// Fresh EV data has arrived within the timeout window.
 		_data_arrived = true;
+	}
+}
+
+
+void FormicWatchdogEv::parse_status(const char status[16])
+{
+	// Collapse the 7 VIOStatus values into the 4 Dstate values published in formic_ev_flag.
+	if (strncmp(status, "NOMINAL", 16) == 0 || strncmp(status, "VALIDATING", 16) == 0) {
+		_dstate = Dstate::VisionON;
+
+	} else if (strncmp(status, "DEGRADED", 16) == 0) {
+		_dstate = Dstate::DEGRADED;
+
+	} else {
+		// INACTIVE, INITIALIZING, RESETTING (no usable pose yet), or unknown
+		_dstate = Dstate::NONE;
 	}
 }
 
@@ -247,16 +276,7 @@ int FormicWatchdogEv::task_spawn(int argc, char *argv[])
 }
 
 
-void FormicWatchdogEv::parse_status(const char status[16])
-{
-    if (strncmp(status, "INACTIVE", 16) == 0) {
-        _dstate = Dstate::VisionON;
-    } else if (strncmp(status, "DEGRADED", 16) == 0) { // Fixed: added '== 0'
-        _dstate = Dstate::DEGRADED;
-    } else {
-        _dstate = Dstate::NONE;
-    }
-}
+
 
 
 FormicWatchdogEv *FormicWatchdogEv::instantiate(int argc, char *argv[])
