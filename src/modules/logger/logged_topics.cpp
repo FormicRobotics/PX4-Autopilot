@@ -167,6 +167,8 @@ void LoggedTopics::add_default_topics()
 	add_optional_topic("fixed_wing_lateral_status", 100);
 	add_optional_topic("fixed_wing_runway_control", 100);
 	add_topic("debug_flag", 10);
+	add_topic("formic_ev_flag", 10);
+	add_topic("formic_pos_req");
 
 	// multi topics
 	add_optional_topic_multi("actuator_outputs", 100, 3);

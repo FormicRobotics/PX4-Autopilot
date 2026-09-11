@@ -69,12 +69,13 @@ void FormicWatchdogEv::Run()
 
 	formic_vehicle_odometry_s formic_odometry{};
 
-	if (_odometry_sub_formic.update(&formic_odometry)) {
+	if (_odometry_sub_formic.update(&formic_odometry) && (formic_odometry.timestamp != _last_ev_msg_timestamp)) {
 		_last_ev_timestamp = hrt_absolute_time();
+		_last_ev_msg_timestamp = formic_odometry.timestamp;
 		vehicle_odometry_s &odometry = formic_odometry.odometry;
 		copy_odometry_msg(odometry);
 		parse_status(formic_odometry.status);
-		
+
 	}
 
 
@@ -99,6 +100,8 @@ void FormicWatchdogEv::copy_odometry_msg(vehicle_odometry_s &odometry)
 
 	odometry.reset_counter = reset_counter;
 	odometry.timestamp_sample = hrt_absolute_time(); // not ok - vlad 
+	odometry.timestamp = hrt_absolute_time(); // not ok - vlad 
+
 
 	if (_pos_requested) {
 		_odometry_pub.publish(odometry);

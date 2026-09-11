@@ -84,6 +84,7 @@ private:
 	bool _ev_hpos_enabled{false};      // EKF2_EV_CTRL horizontal position fusion bit
 	bool _ev_yaw_enabled{false};       // EKF2_EV_CTRL yaw fusion bit
 	hrt_abstime _last_ev_timestamp{0}; // last EV sample arrival time (drives dropout detection)
+	uint64_t _last_ev_msg_timestamp{0}; // last formic_odom message's own timestamp (detects stale/replayed samples)
 	hrt_abstime _last_reset_time{0};  // last increment time (for the reset throttle)
 	bool _heading_alligned_with_ev{false}; // true while the EKF heading is aligned with the EV yaw
 	bool _pos_alligned_with_ev{false}; // true while the EKF heading is aligned with the EV yaw

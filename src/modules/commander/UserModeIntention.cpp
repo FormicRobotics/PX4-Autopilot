@@ -163,9 +163,16 @@ void UserModeIntention::tick()
 
 void UserModeIntention::onFailsafeNavState(uint8_t actual_nav_state)
 {
-	// If the failsafe forced the drone into a non-position mode (e.g. ALTCTL) while
-	// the user intention is still a position mode, we must signal that EV updates
-	// are no longer useful and cancel any pending position-wait.
+	// If the user's intention (or a still-pending request) is still a position mode,
+	// keep requesting position even though failsafe temporarily degraded the executed
+	// nav_state (e.g. ALTCTL after a brief GPS/EV glitch). Clearing the request here
+	// would stop EV from feeding the EKF (see FormicWatchdogEv::copy_odometry_msg),
+	// so position could never recover and we'd be stuck in the fallback mode forever.
+	if (modeRequiresPosition(_user_intented_nav_state)
+	    || (_pending_nav_state != UINT8_MAX && modeRequiresPosition(_pending_nav_state))) {
+		return;
+	}
+
 	if (!modeRequiresPosition(actual_nav_state)) {
 		_pending_nav_state = UINT8_MAX;
 		_pos_wait_start_us = 0;
