@@ -44,6 +44,7 @@ set(msg_files
 	ActuatorServosTrim.msg
 	ActuatorTest.msg
 	AdcReport.msg
+	Airmode.msg
 	Airspeed.msg
 	AirspeedWind.msg
 	AutotuneAttitudeControlStatus.msg

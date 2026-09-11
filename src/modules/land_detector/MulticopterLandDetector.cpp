@@ -284,15 +284,6 @@ bool MulticopterLandDetector::_get_maybe_landed_state()
 	const bool vertical_velocity_valid = _vehicle_local_position.v_z_valid;
 	const bool vertical_estimate = local_position_updated && vertical_velocity_valid;
 
-	land_debug_s land_debug{};
-	land_debug.armed = _armed;
-	land_debug.minimum_thrust_now = minimum_thrust_now;
-	land_debug.not_freefall_hysteresis_get_state = !_freefall_hysteresis.get_state();
-	land_debug.not_rotational_movement = !_rotational_movement;
-	land_debug.vertical_estimate = vertical_estimate;
-	land_debug.ground_contact_hysteresis_get_state = _ground_contact_hysteresis.get_state();
-	land_debug.minimum_thrust_8s_hysteresis_get_state = _minimum_thrust_8s_hysteresis.get_state();
-	_land_debug_sub.publish(land_debug);
 
 	return !_armed ||
 	       (minimum_thrust_now && !_freefall_hysteresis.get_state() && !_rotational_movement

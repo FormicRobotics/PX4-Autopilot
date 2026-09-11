@@ -53,6 +53,7 @@
 #include <uORB/SubscriptionCallback.hpp>
 #include "ManualControlSelector.hpp"
 #include "MovingDiff.hpp"
+#include <uORB/topics/airmode.h>
 
 using namespace time_literals;
 
@@ -113,6 +114,7 @@ private:
 	uORB::Publication<action_request_s> _action_request_pub{ORB_ID(action_request)};
 	uORB::Publication<landing_gear_s> _landing_gear_pub{ORB_ID(landing_gear)};
 	uORB::Publication<manual_control_setpoint_s> _manual_control_setpoint_pub{ORB_ID(manual_control_setpoint)};
+	uORB::Publication<airmode_s> _airmode_pub{ORB_ID(airmode)};
 
 	ManualControlSelector _selector;
 
