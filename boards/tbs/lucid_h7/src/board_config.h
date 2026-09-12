@@ -97,8 +97,6 @@
 #define ADC_SCALED_V5_CHANNEL     	 	/* PC4  */  ADC1_CH(4)
 #define ADC_SCALED_VDD_3V3_SENSORS_CHANNEL 	/* PC5  */  ADC1_CH(8)
 
-#define BOARD_ADC_USB_CONNECTED (px4_arch_gpioread(GPIO_OTGFS_VBUS))
-
 #define ADC_CHANNELS \
 	((1 << ADC_BATTERY1_VOLTAGE_CHANNEL)	| \
 	(1 << ADC_BATTERY1_CURRENT_CHANNEL)	| \
@@ -144,62 +142,25 @@
 // #define GPIO_PG15                       /* PG15 */  (GPIO_INPUT|GPIO_PULLUP|GPIO_PORTG|GPIO_PIN15)
 
 
-/* Tone‑alarm output on PB9 with TIM17_CH1 ---------------------------------- */
-#define TONE_ALARM_TIMER             17      /* use TIM17               */
-#define TONE_ALARM_CHANNEL           1       /* channel 1               */
-
-/* Idle (GPIO) state: low, push‑pull, 2 MHz */
+/* Buzzer on PA15, plain GPIO (matches ArduPilot hwdef: PA15 BUZZER OUTPUT) --- */
 #define GPIO_TONE_ALARM_IDLE \
         (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|\
-         GPIO_OUTPUT_CLEAR|GPIO_PORTB|GPIO_PIN9)
+         GPIO_OUTPUT_CLEAR|GPIO_PORTA|GPIO_PIN15)
 
-/* Active ALT‑function: TIM17_CH1 on AF14 */
-#define GPIO_TONE_ALARM      \
-        (GPIO_ALT|GPIO_AF14|GPIO_SPEED_2MHz|GPIO_PUSHPULL|\
-         GPIO_PORTB|GPIO_PIN9)
-
-
-/* HEATER
- * PWM in future
- */
-/* HEATER  (simple on/off GPIO ----------------------- */
-#define GPIO_HEATER_OUTPUT   \
+#define GPIO_TONE_ALARM_GPIO \
         (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|\
-         GPIO_OUTPUT_CLEAR|GPIO_PORTA|GPIO_PIN8)
+         GPIO_OUTPUT_SET|GPIO_PORTA|GPIO_PIN15)
 
-#define HEATER_OUTPUT_EN(on_true)  px4_arch_gpiowrite(GPIO_HEATER_OUTPUT, (on_true))
-
-/* USB OTG FS
- *
- * PA9  OTG_FS_VBUS VBUS sensing
- */
-// #define GPIO_OTGFS_VBUS         /* PA9 */ (GPIO_INPUT|GPIO_PULLDOWN|GPIO_SPEED_100MHz|GPIO_PORTA|GPIO_PIN9)
-#define GPIO_OTGFS_VBUS  	/* PA9 */ (GPIO_INPUT | GPIO_FLOAT | GPIO_SPEED_50MHz | GPIO_PORTA | GPIO_PIN9)
-
-/* High-resolution timer */
-/* High‑resolution timer (HRT) --------------------------------------------- */
+/* High-resolution timer (HRT) --------------------------------------------- */
 /* Changed to TIM8 to free TIM2 for PWM 3-4 (PA0, PA1) to match ArduPilot */
 #define HRT_TIMER               8   /* use TIM8 for the HRT (was TIM2)     */
 #define HRT_TIMER_CHANNEL       1   /* use capture/compare channel 1      */
 
-/* PPM input - Note: PPM input was on TIM2_CH1 (PA15), but TIM2 is now used for PWM */
-/* PPM input functionality may need to be reconfigured if needed */
-// #define HRT_PPM_CHANNEL		1
-// #define GPIO_PPM_IN             GPIO_TIM2_CH1IN_2
+/* No PPM input on this board (RC input is USART6, SERIAL6) */
 
-/* Safety button ----------------------------------------------------------- */
-#define GPIO_BTN_SAFETY         (GPIO_INPUT|GPIO_PULLDOWN|GPIO_PORTC|GPIO_PIN15)
-
-/* Safety Switch is HW version dependent on having an PX4IO
- * So we init to a benign state with the _INIT definition
- * and provide the the non _INIT one for the driver to make a run time
- * decision to use it.
- */
-#define GPIO_nSAFETY_SWITCH_LED_OUT_INIT   /* PB1 */ (GPIO_INPUT|GPIO_FLOAT|GPIO_PORTB|GPIO_PIN1)
-#define GPIO_nSAFETY_SWITCH_LED_OUT        /* PB1 */ (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_2MHz|GPIO_OUTPUT_SET|GPIO_PORTB|GPIO_PIN1)
-
-/* Enable the FMU to control it if there is no px4io fixme:This should be BOARD_SAFETY_LED(__ontrue) */
-#define GPIO_LED_SAFETY GPIO_nSAFETY_SWITCH_LED_OUT
+/* No physical safety button/switch on this board (PC15 is IMU1_CS, PB1 is
+ * a motor PWM output) — omit GPIO_BTN_SAFETY / GPIO_nSAFETY_SWITCH_LED_OUT,
+ * matching other racing-FC boards without a PX4IO (e.g. kakuteh7mini). */
 
 /* RC Serial port */
 #define RC_SERIAL_PORT          "/dev/ttyS5"
@@ -226,8 +187,6 @@
 		PX4_ADC_GPIO, \
 		GPIO_CAN1_TX, \
 		GPIO_CAN1_RX, \
-		GPIO_CAN2_RX, \
-		GPIO_CAN2_TX, \
 		GPIO_nLED_BLUE, \
 		GPIO_nLED_GREEN, \
 		GPIO_TONE_ALARM_IDLE, \
