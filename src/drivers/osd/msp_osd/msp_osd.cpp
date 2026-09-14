@@ -341,7 +341,7 @@ void MspOsd::Run()
 		char msg[sizeof(msp_name_t) + 5] = {0};
 		int index = 0;
 		msg[index++] = MSP_DP_WRITE_STRING;
-		msg[index++] = 0x02; // row position
+		msg[index++] = 0x05; // row position
 		msg[index++] = 0x14; // colum position
 		msg[index++] = 0;		// Icon attr
 		msg[index++] = 0x03; // Icon index >
@@ -509,28 +509,13 @@ void MspOsd::Run()
 			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formic_ring_t));
 		}
 	}
-
-	// MSP_FORMIC_VISION_QUALITY
-	{
-		vehicle_odometry_s vehicle_odometry{};
-		_vehicle_vision_odometry_sub.copy(&vehicle_odometry);
-		if (enabled(SymbolIndex::FORMIC_VISION_QUALITY)) {
-			const auto msg = msp_osd::construct_rendor_FORMIC_VISION_QUALITY(vehicle_odometry);
-
-			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formic_vision_quality_t));
-		}
-
-
-
-	}
-
 	// MSP_FORMIC_VIO_STATUS
 	{
-		formic_ev_state_machine_s formic_ev_state_machine{};
-		_formic_ev_state_machine_sub.copy(&formic_ev_state_machine);
+		formic_ev_flag_s formic_ev_flag{};
+		_formic_ev_flag_sub.copy(&formic_ev_flag);
 
 		if (enabled(SymbolIndex::FORMIC_VIO_STATUS)) {
-			const auto msg = msp_osd::construct_rendor_FORMIC_VIO_STATUS(formic_ev_state_machine);
+			const auto msg = msp_osd::construct_rendor_FORMIC_VIO_STATUS(formic_ev_flag);
 
 			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formicc_vio_status_t));
 		}

@@ -270,17 +270,15 @@ set(msg_files
 	versioned/VehicleLandDetected.msg
 	versioned/VehicleLocalPosition.msg
 	versioned/VehicleOdometry.msg
+	versioned/FormicVehicleOdometry.msg
 	versioned/VehicleRatesSetpoint.msg
 	versioned/VehicleStatus.msg
 	versioned/VtolVehicleStatus.msg
 	versioned/Wind.msg
 	ddsFlag.msg
 	totalArmTime.msg
-	FormicEvStateMachine.msg
-	FormicVioJetson.msg
+	FormicEvFlag.msg
 	FormicPosReq.msg
-	FormicVioFeatures.msg
-	FeaturesFilter.msg
 )
 
 list(SORT msg_files)

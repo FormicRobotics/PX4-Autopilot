@@ -68,13 +68,9 @@ void LoggedTopics::add_default_topics()
 	add_topic("failure_detector_status", 100);
 	add_topic("failsafe_flags");
 	// formic debuging 
-	add_topic("formic_vio_jetson");
-	add_topic("formic_ev_state_machine");
-	add_topic("formic_state_machine");	
+	add_topic("formic_ev_flag");
 	add_topic("formic_odom");
-	add_topic("formic_vio_features");
 	add_topic("formic_pos_req");
-	add_topic("features_filter");
 
 	add_optional_topic("follow_target", 500);
 	add_optional_topic("follow_target_estimator", 200);
@@ -167,6 +163,8 @@ void LoggedTopics::add_default_topics()
 	add_optional_topic("fixed_wing_lateral_status", 100);
 	add_optional_topic("fixed_wing_runway_control", 100);
 	add_topic("debug_flag", 10);
+	add_topic("formic_ev_flag", 10);
+	add_topic("formic_pos_req");
 
 	// multi topics
 	add_optional_topic_multi("actuator_outputs", 100, 3);

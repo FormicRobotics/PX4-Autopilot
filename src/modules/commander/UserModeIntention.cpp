@@ -41,9 +41,6 @@ UserModeIntention::UserModeIntention(const vehicle_status_s &vehicle_status,
 	: _vehicle_status(vehicle_status), _health_and_arming_checks(health_and_arming_checks),
 	  _handler(handler)
 {
-	///////add by naor ////////////////
-	_param_pos_wait_limit = param_find("COM_POS_WAIT_LIM");
-	///////add by naor ////////////////
 }
 
 bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource source, bool allow_fallback,
@@ -74,17 +71,14 @@ bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource
 
 		///////add by naor ////////////////
 		// If change failed because position is not yet valid, park the request.
-		// tick() will retry once position has been stable for POS_STABLE_THRESHOLD iterations.
+		// tick() will retry, with no timeout, until position becomes valid and EKF converges.
 		if (!allow_change && modeRequiresPosition(user_intended_nav_state)) {
-			// Only (re)start the wait timer when this is a *fresh* pending request.
-			// Re-issuing the same request while already pending (failsafe re-forcing a
-			// mode, a GCS resending the command, ...) must NOT reset the clock, otherwise
-			// the timeout never elapses and pos_req stays latched at 1.
+			// Only (re)start the wait clock when this is a *fresh* pending request, so that
+			// re-issuing the same request while already pending (failsafe re-forcing a mode,
+			// a GCS resending the command, ...) doesn't reset the elapsed-time log below.
 			if (_pending_nav_state != user_intended_nav_state) {
 				_pos_wait_start_us = hrt_absolute_time();
-				int32_t limit = 30;
-				param_get(_param_pos_wait_limit, &limit);
-				PX4_INFO("Mode %d requires position - waiting up to %d s for solution", user_intended_nav_state, (int)limit);
+				PX4_INFO("Mode %d requires position - waiting for solution", user_intended_nav_state);
 			}
 
 			_pending_nav_state = user_intended_nav_state;
@@ -142,19 +136,14 @@ void UserModeIntention::tick()
 		return;
 	}
 
-	bool valid_pos = false;
-	if (_formic_ev_state_machine_sub.updated()) {
-		formic_ev_state_machine_s watchdog_ev{};
-		_formic_ev_state_machine_sub.copy(&watchdog_ev);
-		valid_pos = watchdog_ev.status == 4; // pipline_status::VALID_POS
-
-	}
+	formic_ev_flag_s formic_ev_flag{};
+	_formic_ev_flag_sub.copy(&formic_ev_flag);
 
 	const bool pos_ok = _health_and_arming_checks.canRun(_pending_nav_state);
 
 	// Only require EV yaw fused when EV is actually being used (EKF2_IMU_CTRL != 0 and EV data arriving).
 	// If position comes from GPS or another non-EV source, ev_yaw_available is false and we skip the EV gate.
-	if (pos_ok && valid_pos) {
+	if (pos_ok && formic_ev_flag.ekfs_converged) {
 		const float elapsed_s = hrt_elapsed_time(&_pos_wait_start_us) * 1e-6f;
 		PX4_INFO("Position available - switching to pending mode %d after %.1f s", _pending_nav_state, (double)elapsed_s);
 		const uint8_t mode = _pending_nav_state;
@@ -165,27 +154,25 @@ void UserModeIntention::tick()
 		publish_formic_pos_req(true);
 
 	} else {
+		// Keep retrying with no timeout: stay parked in the pending mode and keep
+		// requesting position until pos_ok && ekfs_converged becomes true.
 		publish_formic_pos_req(true);
-
-		int32_t limit_s = 30;
-		param_get(_param_pos_wait_limit, &limit_s);
-		const hrt_abstime limit_us = (hrt_abstime)limit_s * 1_s;
-
-		if (hrt_elapsed_time(&_pos_wait_start_us) >= limit_us) {
-			_pending_nav_state = UINT8_MAX;
-			_pos_wait_start_us = 0;
-			change(vehicle_status_s::NAVIGATION_STATE_ALTCTL, ModeChangeSource::User, false, true);
-			publish_formic_pos_req(false);
-		}
 	}
 }
 
 
 void UserModeIntention::onFailsafeNavState(uint8_t actual_nav_state)
 {
-	// If the failsafe forced the drone into a non-position mode (e.g. ALTCTL) while
-	// the user intention is still a position mode, we must signal that EV updates
-	// are no longer useful and cancel any pending position-wait.
+	// If the user's intention (or a still-pending request) is still a position mode,
+	// keep requesting position even though failsafe temporarily degraded the executed
+	// nav_state (e.g. ALTCTL after a brief GPS/EV glitch). Clearing the request here
+	// would stop EV from feeding the EKF (see FormicWatchdogEv::copy_odometry_msg),
+	// so position could never recover and we'd be stuck in the fallback mode forever.
+	if (modeRequiresPosition(_user_intented_nav_state)
+	    || (_pending_nav_state != UINT8_MAX && modeRequiresPosition(_pending_nav_state))) {
+		return;
+	}
+
 	if (!modeRequiresPosition(actual_nav_state)) {
 		_pending_nav_state = UINT8_MAX;
 		_pos_wait_start_us = 0;

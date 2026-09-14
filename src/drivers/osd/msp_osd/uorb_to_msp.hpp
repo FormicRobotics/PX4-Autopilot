@@ -62,7 +62,7 @@
 #include <uORB/topics/estimator_aid_source1d.h>
 #include <uORB/topics/total_arm_time.h>
 #include <uORB/topics/dds_flag.h>
-#include <uORB/topics/formic_ev_state_machine.h>
+#include <uORB/topics/formic_ev_flag.h>			
 // PX4 events interface
 #include <px4_platform_common/events.h>
 
@@ -153,8 +153,6 @@ msp_rendor_formic_ring_t construct_rendor_FORMIC_RING(const dds_flag_s &dds_flag
 
 msp_rendor_formic_crosshairs_t construct_rendor_FORMIC_CROSSHAIRS(int osd_format);
 
-msp_rendor_formic_vision_quality_t construct_rendor_FORMIC_VISION_QUALITY(const vehicle_odometry_s &vehicle_vision_odometry);
-
-msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_ev_state_machine_s &formic_ev_state_machine);
+msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_ev_flag_s &formic_ev_flag);
 
 } // namespace msp_osd

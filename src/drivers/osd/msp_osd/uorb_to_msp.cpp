@@ -214,7 +214,7 @@ msp_rendor_rssi_t construct_rendor_RSSI(const input_rc_s &input_rc)
 {
 	msp_rendor_rssi_t rssi;
 	rssi.screenYPosition = 0x02;
-	rssi.screenXPosition = 0x02;
+	rssi.screenXPosition = 0x05;
 
 	snprintf(&rssi.str[0], sizeof(rssi.str), "%3d", input_rc.link_quality);
 	rssi.str[3] = '%';
@@ -252,7 +252,7 @@ msp_rendor_battery_state_t construct_rendor_BATTERY_STATE(const battery_status_s
 	msp_rendor_battery_state_t battery_state = {0};
 
 	battery_state.subCommand = MSP_DP_WRITE_STRING; // 3 write string. fixed
-	battery_state.screenYPosition = 0x0A;
+	battery_state.screenYPosition = 0x0D;
 	battery_state.screenXPosition = 0x02;
 	battery_state.iconAttrs = 0x00;
 
@@ -598,7 +598,7 @@ msp_rendor_battery_state_t construct_rendor_BATTERY_FULL_VOLTAGE(const battery_s
 	msp_rendor_battery_state_t battery_state = {0};
 
 	battery_state.subCommand = MSP_DP_WRITE_STRING; // 3 write string. fixed
-	battery_state.screenYPosition = 0x0B; // Position below single cell voltage
+	battery_state.screenYPosition = 0x0E; // Position below single cell voltage
 	battery_state.screenXPosition = 0x02;
 	battery_state.iconAttrs = 0x00;
 	battery_state.iconIndex = 0x91; // Full battery icon (same as single cell full battery)(145 dec)
@@ -614,8 +614,8 @@ msp_rendor_distance_sensor_t construct_rendor_DISTANCE_SENSOR(const estimator_ai
 	msp_rendor_distance_sensor_t distance = {0}; // Initialize all fields to zero
 
 	distance.subCommand = MSP_DP_WRITE_STRING; // 0x03 Write string
-	distance.screenYPosition = 0x0C;
-	distance.screenXPosition = 0x02;
+	distance.screenYPosition = 0x0E;
+	distance.screenXPosition = 0x2F;
 	distance.iconAttrs = 0x00;
 	distance.iconIndex = 0xB1; // Use altitude icon (similar to distance/height measurement)
 
@@ -647,7 +647,7 @@ msp_baro_altitude_t construct_rendor_BARO_ALT(const estimator_aid_source1d_s &__
 
 	baro_altitude.subCommand = MSP_DP_WRITE_STRING; // 0x03 Write string
 	baro_altitude.screenYPosition = 0x0D;
-	baro_altitude.screenXPosition = 0x02;
+	baro_altitude.screenXPosition = 0x2F;
 	baro_altitude.iconAttrs = 0x00;
 	baro_altitude.iconIndex = 0x7F; // Use altitude icon
 
@@ -670,8 +670,8 @@ msp_rendor_formic_ring_t construct_rendor_FORMIC_RING(const dds_flag_s &dds_flag
 	msp_rendor_formic_ring_t formic_ring{};
 
 	formic_ring.subCommand = MSP_DP_WRITE_STRING; // 0x03 subcommand write string. fixed
-	formic_ring.screenYPosition = 0x09;
-	formic_ring.screenXPosition = 0x01;
+	formic_ring.screenYPosition = 0x11;
+	formic_ring.screenXPosition = 0x08;
 	formic_ring.iconAttrs = 0x00;
 	formic_ring.iconIndex = 0x00; // no icon
 
@@ -709,8 +709,8 @@ msp_rendor_total_arm_time_t construct_rendor_TOTAL_ACTIVATED_TIME(const vehicle_
 	msp_rendor_total_arm_time_t render_total_arm_time = {}; // Initialize all fields to zero
 
 	render_total_arm_time.subCommand = MSP_DP_WRITE_STRING; // 0x03 Write string
-	render_total_arm_time.screenYPosition = 0x0E;
-	render_total_arm_time.screenXPosition = 0x02;
+	render_total_arm_time.screenYPosition = 0x08;
+	render_total_arm_time.screenXPosition = 0x2F;
 	render_total_arm_time.iconAttrs = 0x00;
 	render_total_arm_time.iconIndex = MCP_TIMER_ICON; // Timer/clock icon (common Betaflight timer icon index)
 
@@ -733,8 +733,8 @@ msp_rendor_total_arm_time_t construct_rendor_TOTAL_ARM_TIME(const total_arm_time
 	msp_rendor_total_arm_time_t render_total_arm_time = {}; // Initialize all fields to zero
 
 	render_total_arm_time.subCommand = MSP_DP_WRITE_STRING; // 0x03 Write string
-	render_total_arm_time.screenYPosition = 0x0F;
-	render_total_arm_time.screenXPosition = 0x02;
+	render_total_arm_time.screenYPosition = 0x09;
+	render_total_arm_time.screenXPosition = 0x2F;
 	render_total_arm_time.iconAttrs = 0x00;
 	render_total_arm_time.iconIndex = MCP_TIMER_ICON; // Timer/clock icon (common Betaflight timer icon index)
 
@@ -754,8 +754,8 @@ msp_rendor_formic_vision_quality_t construct_rendor_FORMIC_VISION_QUALITY(const 
 {
 	msp_rendor_formic_vision_quality_t vision_quality = {};
 	vision_quality.subCommand = MSP_DP_WRITE_STRING; 
-	vision_quality.screenYPosition = 0x10;
-	vision_quality.screenXPosition = 0x02;
+	vision_quality.screenYPosition = 0x0E;
+	vision_quality.screenXPosition = 0x17;
 
 	const uint64_t VISION_TIMEOUT_US = 1000000; // 1 second
 	const uint64_t data_age = hrt_absolute_time() - vehicle_vision_odometry.timestamp;
@@ -778,27 +778,23 @@ msp_rendor_formic_vision_quality_t construct_rendor_FORMIC_VISION_QUALITY(const 
 	return vision_quality;
 }
 
-msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_ev_state_machine_s &formic_ev_state_machine)
+msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_ev_flag_s &formic_ev_flag)
 {
 	msp_rendor_formicc_vio_status_t vio_status = {};
 	vio_status.subCommand = MSP_DP_WRITE_STRING;
-	vio_status.screenYPosition = 0x10;
-	vio_status.screenXPosition = 0x18;
+	vio_status.screenYPosition = 0x0F;
+	vio_status.screenXPosition = 0x17;
 	vio_status.systemElement = 0x00; // Crosshairs system element ID (0x00 = CROSSHAIR)
 	vio_status.iconIndex = 0 ; // no icon
 
-	// Map the pipeline state machine status (see formic_watchdog_ev.hpp::pipline_status)
-	// to a short label. The str buffer is 8 bytes, so labels must be <= 7 chars.
+	// Map Dstate (see formic_watchdog_ev.hpp) to a short label.
+	// The str buffer is 8 bytes, so labels must be <= 7 chars.
 	const char *label;
 
-	switch (formic_ev_state_machine.status) {
-	case 0:  label = "MANUAL"; break;  // MANUAL
-	case 1:  label = "WAIT";   break;  // WAIT_TO_DATA
-	case 2:  label = "INIT-NF"; break; // INIT_NOT_FUSED
-	case 3:  label = "INIT-F"; break;  // INIT_FUSED
-	case 4:  label = "VALID";  break;  // VALID_POS
-	case 5:  label = "ERROR";  break;  // EV_ERROR
-	default: label = "???";    break;
+	switch (formic_ev_flag.dstate) {
+	case 1:  label = "VIS-OK"; break; // Dstate::VisionON
+	case 2:  label = "DEGRAD"; break; // Dstate::DEGRADED
+	default: label = "";   break;
 	}
 
 	memset(&vio_status.str[0], 0, sizeof(vio_status.str));

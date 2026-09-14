@@ -40,7 +40,6 @@
 #include "HomePosition.hpp"
 #include "ModeManagement.hpp"
 #include "MulticopterThrowLaunch/MulticopterThrowLaunch.hpp"
-#include "MulticopterTurtle/MulticopterTurtleMode.hpp"
 #include "Safety.hpp"
  #include "UserModeIntention.hpp"
  #include "worker_thread.hpp"
@@ -182,7 +181,6 @@
 
 	 void throwLaunchUpdate();
  
-	 void turtleModeUpdate();
 
 	 void vtolStatusUpdate();
  
@@ -230,7 +228,6 @@
 	 FailureDetector		_failure_detector{this};
 	 HealthAndArmingChecks	_health_and_arming_checks{this, _vehicle_status};
 	 MulticopterThrowLaunch  _multicopter_throw_launch{this};
-	 MulticopterTurtleMode  _multicopter_turtle{this};
 	 Safety			_safety{};
 	 WorkerThread 		_worker_thread{};
 	 ModeManagement  	_mode_management{
