@@ -49,6 +49,7 @@ parameters:
                 28: BARO_ALTITUDE
                 29: FORMIC_VISION_QUALITY
                 30: FORMIC_VIO_STATUS
+                31: FORMIC_AIRMODE
 
             default: 16383
 

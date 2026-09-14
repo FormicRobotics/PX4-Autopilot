@@ -536,6 +536,18 @@ void MspOsd::Run()
 		}
 	}
 
+	// MSP_FORMIC_AIRMODE
+	{
+		airmode_s airmode{};
+		_airmode_sub.copy(&airmode);
+
+		if (enabled(SymbolIndex::FORMIC_AIRMODE)) {
+			const auto msg = msp_osd::construct_rendor_FORMIC_AIRMODE(airmode);
+
+			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formic_airmode_t));
+		}
+	}
+
 	// MSP_FORMIC_CROSSHAIRS
 	{
 		if (enabled(SymbolIndex::FORMIC_CROSSHAIRS)) {

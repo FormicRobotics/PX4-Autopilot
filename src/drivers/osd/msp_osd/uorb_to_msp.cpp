@@ -807,4 +807,23 @@ msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_
 	return vio_status;
 }
 
+msp_rendor_formic_airmode_t construct_rendor_FORMIC_AIRMODE(const airmode_s &airmode)
+{
+	msp_rendor_formic_airmode_t airmode_disp = {};
+	airmode_disp.subCommand = MSP_DP_WRITE_STRING;
+	airmode_disp.screenYPosition = 0x10;
+	airmode_disp.screenXPosition = 0x17;
+	airmode_disp.systemElement = 0x00;
+	airmode_disp.iconIndex = 0; // no icon
+
+	// effective airmode is forced to 0 (off) while ground-contact / ground-effect
+	// forces it off, regardless of the user's MC_AIRMODE setting
+	const uint8_t effective_airmode = airmode.airmode_forced_off ? 0 : airmode.user_airmode;
+
+	memset(&airmode_disp.str[0], 0, sizeof(airmode_disp.str));
+	snprintf(&airmode_disp.str[0], sizeof(airmode_disp.str), "AIR:%u", effective_airmode);
+
+	return airmode_disp;
+}
+
 } // namespace msp_osd

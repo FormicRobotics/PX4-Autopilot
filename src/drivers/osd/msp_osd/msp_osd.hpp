@@ -59,6 +59,7 @@
 #include <uORB/topics/dds_flag.h>
 #include <uORB/topics/vehicle_odometry.h> // TODO: switch to vehicle_visual_odometry when available
 #include <uORB/topics/formic_ev_state_machine.h>
+#include <uORB/topics/airmode.h>
 
 #include "MspV1.hpp"
 #include "MessageDisplay/MessageDisplay.hpp"
@@ -112,6 +113,7 @@ enum SymbolIndex : uint8_t {
 	BARO_ALTITUDE		= 28,
 	FORMIC_VISION_QUALITY	= 29,
 	FORMIC_VIO_STATUS	= 30,
+	FORMIC_AIRMODE		= 31,
 };
 
 class MspOsd : public ModuleBase<MspOsd>, public ModuleParams, public px4::ScheduledWorkItem
@@ -183,6 +185,7 @@ private:
 	uORB::Subscription _dds_flag_sub{ORB_ID(dds_flag)};
 	uORB::Subscription _vehicle_vision_odometry_sub{ORB_ID(vehicle_visual_odometry)}; // TODO: switch to vehicle_visual_odometry when available
 	uORB::Subscription _formic_ev_state_machine_sub{ORB_ID(formic_ev_state_machine)};
+	uORB::Subscription _airmode_sub{ORB_ID(airmode)};
 
 	// local heartbeat
 	bool _heartbeat{false};

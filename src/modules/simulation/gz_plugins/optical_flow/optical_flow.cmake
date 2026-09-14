@@ -32,6 +32,12 @@
 ############################################################################
 
 include(ExternalProject)
+
+if(POLICY CMP0146)
+    # Allow find_package(CUDA) via the legacy FindCUDA module for CUDA-enabled
+    # OpenCV builds; CMake >= 3.27 defaults this to NEW (module removed).
+    cmake_policy(SET CMP0146 OLD)
+endif()
 find_package(OpenCV REQUIRED)
 
 if(NOT TARGET OpticalFlow)
