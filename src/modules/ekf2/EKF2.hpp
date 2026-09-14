@@ -87,7 +87,6 @@
 #include <uORB/topics/vehicle_odometry.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/yaw_estimator_status.h>
-#include <uORB/topics/formic_ev_state_machine.h>
 #include <uORB/topics/formic_pos_req.h>
 
 #if defined(CONFIG_EKF2_AIRSPEED)
