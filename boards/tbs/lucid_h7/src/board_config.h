@@ -135,6 +135,15 @@
 
 #define BOARD_HAS_PWM  DIRECT_PWM_OUTPUT_CHANNELS
 
+/*
+ * Bidirectional DShot only supports a single timer (see _bidi_timer_index in
+ * dshot.c). Timer index 3 is TIM4 (PWM 7-10: S7-S10), which has 4 channels -
+ * more than any other timer on this board - so it's used as the bidir group.
+ * (Channel 4 / S10 has no DMA capture line on STM32H7 and is skipped by the
+ * driver's round-robin.)
+ */
+#define BOARD_BIDIRECTIONAL_DSHOT_TIMER_INDEX 3
+
 /* Spare GPIO */
 
 // #define GPIO_PG6                        /* PG6  */  (GPIO_INPUT|GPIO_PULLUP|GPIO_PORTG|GPIO_PIN6)
