@@ -87,8 +87,11 @@ void ManualControl::processInput(hrt_abstime now)
 			_system_id = vehicle_status.system_id;
 			_rotary_wing = (vehicle_status.vehicle_type == vehicle_status_s::VEHICLE_TYPE_ROTARY_WING);
 			_vtol = vehicle_status.is_vtol;
+			_nav_state = vehicle_status.nav_state;
 		}
 	}
+
+	updateAirmode();
 
 	// Check if parameters have changed
 	if (_parameter_update_sub.updated()) {
@@ -365,40 +368,52 @@ void ManualControl::updateParams()
 			}
 		}
 	}
+}
 
-	// MC_AIRMODE: force airmode off on ground contact / ground effect while flying, restore the user's setting once airborne again.
-	// Only touch the param while armed: land_detected.ground_contact is essentially always true while disarmed on the ground,
-	// so doing this unconditionally would immediately overwrite any airmode change the user makes before arming.
-	if (_param_handle_mc_airmode != PARAM_INVALID) {
-		if (!_armed) {
-			// not flying: nothing to force off, just keep tracking whatever the user has configured
-			_airmode_forced_off = false;
+void ManualControl::updateAirmode()
+{
+	// MC_AIRMODE: only allow airmode while in Acro mode AND clear of ground contact / ground effect, force it
+	// off otherwise, restore the user's setting once both conditions are met again. Requiring Acro keeps
+	// airmode out of every other mode; still checking the land detector on top of that gives a landing (or
+	// crashing) drone in Acro a chance to cut power instead of airmode fighting it into the ground.
+	// Evaluated every cycle (not just on param updates) so it reacts immediately to a mode switch or landing.
+	// Only touch the param while armed: doing this unconditionally would immediately overwrite any airmode
+	// change the user makes before arming.
+	if (_param_handle_mc_airmode == PARAM_INVALID) {
+		return;
+	}
+
+	if (!_armed) {
+		// not flying: nothing to force off, just keep tracking whatever the user has configured
+		_airmode_forced_off = false;
+		param_get(_param_handle_mc_airmode, &_user_airmode);
+
+	} else {
+		if (!_airmode_forced_off) {
 			param_get(_param_handle_mc_airmode, &_user_airmode);
-
-		} else {
-			if (!_airmode_forced_off) {
-				param_get(_param_handle_mc_airmode, &_user_airmode);
-			}
-
-			if (_user_airmode != 0) {
-				vehicle_land_detected_s land_detected{};
-				_vehicle_land_detected_sub.copy(&land_detected);
-				const bool should_force_off = land_detected.ground_contact || land_detected.in_ground_effect;
-
-				if (should_force_off != _airmode_forced_off) {
-					int32_t new_airmode = should_force_off ? 0 : _user_airmode;
-					param_set(_param_handle_mc_airmode, &new_airmode);
-					_airmode_forced_off = should_force_off;
-				}
-			}
 		}
 
-		airmode_s airmode{};
-		airmode.timestamp = hrt_absolute_time();
-		airmode.user_airmode = _user_airmode;
-		airmode.airmode_forced_off = _airmode_forced_off;
-		_airmode_pub.publish(airmode);
+		if (_user_airmode != 0) {
+			vehicle_land_detected_s land_detected{};
+			_vehicle_land_detected_sub.copy(&land_detected);
+
+			const bool should_force_off = (_nav_state != vehicle_status_s::NAVIGATION_STATE_ACRO)
+						       || land_detected.ground_contact
+						       || land_detected.in_ground_effect;
+
+			if (should_force_off != _airmode_forced_off) {
+				int32_t new_airmode = should_force_off ? 0 : _user_airmode;
+				param_set(_param_handle_mc_airmode, &new_airmode);
+				_airmode_forced_off = should_force_off;
+			}
+		}
 	}
+
+	airmode_s airmode{};
+	airmode.timestamp = hrt_absolute_time();
+	airmode.user_airmode = _user_airmode;
+	airmode.airmode_forced_off = _airmode_forced_off;
+	_airmode_pub.publish(airmode);
 }
 
 void ManualControl::processStickArming(const manual_control_setpoint_s &input)

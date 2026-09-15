@@ -92,6 +92,7 @@ private:
 	void evaluateModeSlot(uint8_t mode_slot);
 	void sendActionRequest(int8_t action, int8_t source, int8_t mode = 0);
 	void publishLandingGear(int8_t action);
+	void updateAirmode();
 
 	enum class CameraMode {
 		Image = 0,
@@ -145,6 +146,7 @@ private:
 	uint8_t _system_id{1};
 	bool _rotary_wing{false};
 	bool _vtol{false};
+	uint8_t _nav_state{0};
 	param_t _param_handle_mc_airmode{PARAM_INVALID};
 	int32_t _user_airmode{0};
 	bool _airmode_forced_off{false};
