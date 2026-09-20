@@ -101,10 +101,11 @@ public:
 	// where position is valid and switches into the mode after POS_STABLE_THRESHOLD.
 	void tick();
 
-	// Called from Commander after failsafe resolves the actual nav_state.
-	// If the drone was forced to a non-position mode by failsafe (user intention may still
-	// be position), clear the pending request and publish let_update_ev = false.
-	void onFailsafeNavState(uint8_t actual_nav_state);
+	// Called from Commander every loop while failsafe is active. Keeps requesting position
+	// (let_update_ev = true) as long as the user's intended mode still requires it, even if
+	// failsafe has temporarily forced a non-position actual nav_state - only clears the
+	// request once the user's intention itself no longer requires position.
+	void onFailsafeNavState();
 	///////add by naor ////////////////
 
 private:

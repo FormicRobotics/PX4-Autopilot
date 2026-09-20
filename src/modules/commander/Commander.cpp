@@ -2425,11 +2425,10 @@
 	 _vehicle_status.failsafe_and_user_took_over = _failsafe.userTakeoverActive();
 
 	 ///////add by naor ////////////////
-	 // If failsafe is active and the actual nav_state is non-position, clear let_update_ev.
-	 // This handles the case where failsafe degrades POSCTL → ALTCTL without changing
-	 // the user-intended mode (so change() was never called with the fallback mode).
+	 // While failsafe is active, keep (or stop) requesting position based on the user's
+	 // intended mode - not the failsafe-forced actual nav_state. See onFailsafeNavState().
 	 if (_vehicle_status.failsafe) {
-		 _user_mode_intention.onFailsafeNavState(_vehicle_status.nav_state);
+		 _user_mode_intention.onFailsafeNavState();
 	 }
 	 ///////add by naor ////////////////
  

@@ -161,16 +161,24 @@ void UserModeIntention::tick()
 }
 
 
-void UserModeIntention::onFailsafeNavState(uint8_t actual_nav_state)
+void UserModeIntention::onFailsafeNavState()
 {
-	// If the failsafe forced the drone into a non-position mode (e.g. ALTCTL) while
-	// the user intention is still a position mode, we must signal that EV updates
-	// are no longer useful and cancel any pending position-wait.
-	if (!modeRequiresPosition(actual_nav_state)) {
-		_pending_nav_state = UINT8_MAX;
-		_pos_wait_start_us = 0;
-		publish_formic_pos_req(false);
+	// Keep requesting position as long as the *user's intention* still needs it, even if
+	// failsafe has temporarily forced the actual nav_state into a non-position mode (e.g.
+	// POSCTL -> ALTCTL after a transient position loss). Publishing pos_req = false here
+	// would cut the EV/vision feed to the estimator (see formic_watchdog_ev), which is
+	// exactly what's needed to regain position - doing so would permanently lock us out
+	// of ever recovering, since the failsafe can only clear once position becomes valid
+	// again. Only stop requesting position once the user's intended mode itself no longer
+	// requires it (e.g. they explicitly switched to ALTCTL/STAB).
+	if (modeRequiresPosition(_user_intented_nav_state)) {
+		publish_formic_pos_req(true);
+		return;
 	}
+
+	_pending_nav_state = UINT8_MAX;
+	_pos_wait_start_us = 0;
+	publish_formic_pos_req(false);
 }
 
 void UserModeIntention::publish_formic_pos_req(bool pos_requested)
