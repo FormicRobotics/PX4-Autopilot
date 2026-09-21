@@ -324,6 +324,10 @@ int DShot::handle_new_bdshot_erpm(void)
 				esc_status.esc[telemetry_index].timestamp = hrt_absolute_time();
 				esc_status.esc[telemetry_index].esc_rpm = (erpm * 100) / (_param_mot_pole_count.get() / 2);
 				esc_status.esc[telemetry_index].actuator_function = _actuator_functions[telemetry_index];
+
+				if (_edt_enabled) {
+					fill_edt(i, esc_status.esc[telemetry_index]);
+				}
 			}
 
 			++telemetry_index;
@@ -333,6 +337,60 @@ int DShot::handle_new_bdshot_erpm(void)
 	perf_count(_bdshot_rpm_perf);
 
 	return num_erpms;
+}
+
+void DShot::fill_edt(unsigned output, esc_report_s &esc)
+{
+	// An ESC sends each value every second or so and only 1 frame in 4 of an output is read (round
+	// robin), so a value is refreshed every few seconds. Older than this means it is not coming any more.
+	static constexpr uint32_t EDT_TIMEOUT_MS = 15000;
+
+	// 0 is what esc_status holds for a value the ESC does not report
+	float temperature = 0.f;
+	float current = 0.f;
+	uint8_t raw;
+	uint32_t age_ms;
+
+	if (up_bdshot_get_edt(output, DSHOT_EDT_TEMPERATURE, &raw, &age_ms) == OK && age_ms < EDT_TIMEOUT_MS) {
+		temperature = raw;
+	}
+
+	// Voltage is deliberately not reported yet: the ESCs on the aerium radian read 8-9 on a 6S pack (the
+	// spec, 0.25 V per LSB, would give ~90-100), so the value is not the pack voltage. Report it once
+	// the ESC side is confirmed, otherwise esc_battery and the logs would get a wrong voltage.
+
+	if (up_bdshot_get_edt(output, DSHOT_EDT_CURRENT, &raw, &age_ms) == OK && age_ms < EDT_TIMEOUT_MS) {
+		current = raw;
+	}
+
+	esc.esc_temperature = temperature;
+	esc.esc_current = current;
+}
+
+void DShot::update_edt()
+{
+	// EDT only exists on top of bidirectional DShot
+	const bool enable = _bidirectional_dshot_enabled && _outputs_initialized && _param_dshot_edt_en.get();
+
+	if (enable != _edt_enabled) {
+		_edt_enabled = enable;
+		up_bdshot_set_edt_enabled(enable);
+
+		// Tell the ESCs too. Wait a while first: a command sent to an ESC that is still booting is lost.
+		_edt_command_pending = true;
+		_edt_send_after = hrt_absolute_time() + 10_s;
+	}
+
+	// The command goes out through the normal command path, which only sends it to outputs that are
+	// at the disarmed value, and it has to be repeated (the spec asks for at least 6 in a row).
+	if (_edt_command_pending && hrt_absolute_time() >= _edt_send_after && !_current_command.valid()
+	    && !_mixing_output.armed().armed) {
+		_current_command.command = _edt_enabled ? DShot_cmd_extended_telemetry_enable : DShot_cmd_extended_telemetry_disable;
+		_current_command.num_repetitions = 10;
+		_current_command.motor_mask = 0xff;
+		_current_command.save = false;
+		_edt_command_pending = false;
+	}
 }
 
 int DShot::send_command_thread_safe(const dshot_command_t command, const int num_repetitions, const int motor_index)
@@ -514,6 +572,8 @@ void DShot::Run()
 		_request_telemetry_init.store(false);
 	}
 
+	update_edt();
+
 	// new command?
 	if (!_current_command.valid()) {
 		Command *new_command = _new_command.load();
@@ -689,6 +749,8 @@ int DShot::custom_command(int argc, char *argv[])
 		{"save", DShot_cmd_save_settings, 10},
 		{"3d_on", DShot_cmd_3d_mode_on, 10},
 		{"3d_off", DShot_cmd_3d_mode_off, 10},
+		{"edt_on", DShot_cmd_extended_telemetry_enable, 10},
+		{"edt_off", DShot_cmd_extended_telemetry_disable, 10},
 		{"beep1", DShot_cmd_beacon1, 1},
 		{"beep2", DShot_cmd_beacon2, 1},
 		{"beep3", DShot_cmd_beacon3, 1},
@@ -787,6 +849,10 @@ After saving, the reversed direction will be regarded as the normal one. So to r
 	PRINT_MODULE_USAGE_COMMAND_DESCR("3d_on", "Enable 3D mode");
 	PRINT_MODULE_USAGE_PARAM_INT('m', -1, 0, 16, "Motor index (1-based, default=all)", true);
 	PRINT_MODULE_USAGE_COMMAND_DESCR("3d_off", "Disable 3D mode");
+	PRINT_MODULE_USAGE_PARAM_INT('m', -1, 0, 16, "Motor index (1-based, default=all)", true);
+	PRINT_MODULE_USAGE_COMMAND_DESCR("edt_on", "Ask the ESCs to send Extended DShot Telemetry (see DSHOT_EDT_EN)");
+	PRINT_MODULE_USAGE_PARAM_INT('m', -1, 0, 16, "Motor index (1-based, default=all)", true);
+	PRINT_MODULE_USAGE_COMMAND_DESCR("edt_off", "Ask the ESCs to stop sending Extended DShot Telemetry");
 	PRINT_MODULE_USAGE_PARAM_INT('m', -1, 0, 16, "Motor index (1-based, default=all)", true);
 	PRINT_MODULE_USAGE_COMMAND_DESCR("beep1", "Send Beep pattern 1");
 	PRINT_MODULE_USAGE_PARAM_INT('m', -1, 0, 16, "Motor index (1-based, default=all)", true);

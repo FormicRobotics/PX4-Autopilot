@@ -102,7 +102,7 @@ static void dma_burst_finished_callback(DMA_HANDLE handle, uint8_t status, void 
 static void capture_complete_callback(void *arg);
 
 static void process_capture_results(uint8_t timer_index, uint8_t channel_index);
-static unsigned calculate_period(uint8_t timer_index, uint8_t channel_index);
+static unsigned calculate_period(uint8_t timer_index, uint8_t channel_index, bool *is_edt);
 
 // Timer configuration struct
 typedef struct timer_config_t {
@@ -143,6 +143,18 @@ static uint32_t read_ok[MAX_NUM_CHANNELS_PER_TIMER] = {};
 static uint32_t read_fail_nibble[MAX_NUM_CHANNELS_PER_TIMER] = {};
 static uint32_t read_fail_crc[MAX_NUM_CHANNELS_PER_TIMER] = {};
 static uint32_t read_fail_zero[MAX_NUM_CHANNELS_PER_TIMER] = {};
+
+// Extended DShot Telemetry (EDT). When enabled the ESC may answer with a frame that is not an eRPM
+// value: same 16 bit layout (eee mmmmmmmmm cccc) but with bit 8 of the payload clear and a
+// non-zero exponent, the top nibble of the payload then says what it is.
+// https://github.com/bird-sanctuary/extended-dshot-telemetry
+#define EDT_NUM_TYPES DSHOT_EDT_NUM_TYPES
+static const char *const edt_type_names[EDT_NUM_TYPES] = {"temp", "volt", "curr", "dbg1", "dbg2", "stress", "status"};
+
+static bool     _edt_enabled = false;
+static uint32_t edt_count[MAX_NUM_CHANNELS_PER_TIMER][EDT_NUM_TYPES] = {};
+static uint8_t  edt_last[MAX_NUM_CHANNELS_PER_TIMER][EDT_NUM_TYPES] = {};
+static hrt_abstime edt_last_time[MAX_NUM_CHANNELS_PER_TIMER][EDT_NUM_TYPES] = {};
 
 static perf_counter_t hrt_callback_perf = NULL;
 
@@ -557,10 +569,16 @@ static void capture_complete_callback(void *arg)
 
 void process_capture_results(uint8_t timer_index, uint8_t channel_index)
 {
-	const unsigned period = calculate_period(timer_index, channel_index);
+	bool is_edt = false;
+	const unsigned period = calculate_period(timer_index, channel_index, &is_edt);
 
 	uint8_t output_channel = output_channel_from_timer_channel(timer_index, channel_index);
 
+	if (is_edt) {
+		// Not an eRPM frame: keep the last eRPM value, the channel did answer though
+		_erpms_ready[output_channel] = true;
+		return;
+	}
 
 	if (period == 0) {
 		// If the parsing failed, set the eRPM to 0
@@ -678,6 +696,93 @@ int up_bdshot_channel_status(uint8_t channel)
 	return 0;
 }
 
+// Show what non-eRPM frames a channel has received: latest value (with units where the spec has
+// them) and how many of each type.
+static void print_edt_status(uint8_t channel_index)
+{
+	char line[160];
+	size_t n = 0;
+
+	for (unsigned type = 0; type < EDT_NUM_TYPES && n < sizeof(line); type++) {
+		if (edt_count[channel_index][type] == 0) {
+			continue;
+		}
+
+		const unsigned raw = edt_last[channel_index][type];
+		int len;
+
+		switch (type) {
+		case 0:
+			len = snprintf(line + n, sizeof(line) - n, " temp=%uC", raw);
+			break;
+
+		case 1:
+			// raw byte first, then what it is at the spec scale (0.25 V per LSB)
+			len = snprintf(line + n, sizeof(line) - n, " volt=raw%u(%u.%02uV)", raw, raw / 4, (raw % 4) * 25);
+			break;
+
+		case 2:
+			len = snprintf(line + n, sizeof(line) - n, " curr=%uA", raw);
+			break;
+
+		case 6:
+			len = snprintf(line + n, sizeof(line) - n, " status=0x%02x", raw);
+			break;
+
+		default:
+			len = snprintf(line + n, sizeof(line) - n, " %s=%u", edt_type_names[type], raw);
+			break;
+		}
+
+		if (len < 0) {
+			break;
+		}
+
+		n += len;
+
+		if (n < sizeof(line)) {
+			n += snprintf(line + n, sizeof(line) - n, "(x%lu)", edt_count[channel_index][type]);
+		}
+	}
+
+	if (n == 0) {
+		PX4_INFO("  Channel %u EDT: no extended frames received", channel_index);
+
+	} else {
+		PX4_INFO("  Channel %u EDT:%s", channel_index, line);
+	}
+}
+
+void up_bdshot_set_edt_enabled(bool enabled)
+{
+	_edt_enabled = enabled;
+}
+
+int up_bdshot_get_edt(uint8_t output_channel, dshot_edt_type_t type, uint8_t *value, uint32_t *age_ms)
+{
+	if (output_channel >= MAX_TIMER_IO_CHANNELS || (unsigned)type >= EDT_NUM_TYPES) {
+		return -EINVAL;
+	}
+
+	uint8_t timer_index = timer_io_channels[output_channel].timer_index;
+	uint8_t timer_channel_index = timer_io_channels[output_channel].timer_channel - 1;
+
+	// eRPM (and so EDT) is only read on the bidirectional timer
+	if (timer_index != _bidi_timer_index || !timer_configs[timer_index].initialized_channels[timer_channel_index]) {
+		return -ENODEV;
+	}
+
+	const hrt_abstime received = edt_last_time[timer_channel_index][type];
+
+	if (received == 0) {
+		return -ENODATA;
+	}
+
+	*value = edt_last[timer_channel_index][type];
+	*age_ms = (uint32_t)(hrt_elapsed_time(&received) / 1000);
+	return OK;
+}
+
 void up_bdshot_status(void)
 {
 	PX4_INFO("dshot driver stats:");
@@ -698,6 +803,10 @@ void up_bdshot_status(void)
 				 read_fail_nibble[timer_channel_index],
 				 read_fail_crc[timer_channel_index],
 				 read_fail_zero[timer_channel_index]);
+
+			if (_edt_enabled) {
+				print_edt_status(timer_channel_index);
+			}
 		}
 	}
 }
@@ -759,8 +868,10 @@ uint8_t nibbles_from_mapped(uint8_t mapped)
 	}
 }
 
-unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
+unsigned calculate_period(uint8_t timer_index, uint8_t channel_index, bool *is_edt)
 {
+	*is_edt = false;
+
 	uint32_t value = 0;
 	uint32_t high = 1; // We start off with high
 	unsigned shifted = 0;
@@ -833,6 +944,23 @@ unsigned calculate_period(uint8_t timer_index, uint8_t channel_index)
 	}
 
 	++read_ok[channel_index];;
+
+	if (_edt_enabled) {
+		// top nibble of the payload: 3 exponent bits + the mantissa MSB. An eRPM frame has a zero
+		// nibble (period < 256) or the MSB set (the period is normalised, so it is always set when
+		// the exponent is not zero). Everything else is an EDT frame.
+		const unsigned prefix = (payload >> 8) & 0xF;
+
+		if (prefix != 0 && (prefix & 1) == 0) {
+			const unsigned type = (prefix >> 1) - 1; // 0x2 temp ... 0xE status
+			++edt_count[channel_index][type];
+			edt_last[channel_index][type] = payload & 0xFF;
+			edt_last_time[channel_index][type] = hrt_absolute_time();
+			*is_edt = true;
+			return 0;
+		}
+	}
+
 	return period;
 }
 

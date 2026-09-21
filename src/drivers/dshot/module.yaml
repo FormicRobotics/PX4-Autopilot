@@ -43,6 +43,16 @@ parameters:
             type: boolean
             default: 0
             reboot_required: true
+        DSHOT_EDT_EN:
+            description:
+                short: Enable Extended DShot Telemetry (EDT)
+                long: |
+                    Requires bidirectional DShot (DSHOT_BIDIR_EN). Asks the ESCs to also send extended
+                    telemetry frames (temperature, voltage, current, stress level, status) on the
+                    bidirectional DShot line, and decodes them. For now they are only counted and
+                    shown by 'dshot status'. Requires ESC firmware that supports EDT.
+            type: boolean
+            default: 0
         DSHOT_3D_DEAD_H:
             description:
                 short: DSHOT 3D deadband high

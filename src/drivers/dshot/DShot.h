@@ -129,6 +129,16 @@ private:
 
 	int handle_new_bdshot_erpm(void);
 
+	/** Follow DSHOT_EDT_EN: enable/disable the EDT decoder and tell the ESCs */
+	void update_edt(void);
+
+	/** Put the Extended DShot Telemetry received from an output into an esc_status entry */
+	void fill_edt(unsigned output, esc_report_s &esc);
+
+	bool _edt_enabled{false};
+	bool _edt_command_pending{false};
+	hrt_abstime _edt_send_after{0};
+
 	void Run() override;
 
 	void update_params();
@@ -179,6 +189,7 @@ private:
 		(ParamInt<px4::params::DSHOT_3D_DEAD_H>) _param_dshot_3d_dead_h,
 		(ParamInt<px4::params::DSHOT_3D_DEAD_L>) _param_dshot_3d_dead_l,
 		(ParamInt<px4::params::MOT_POLE_COUNT>) _param_mot_pole_count,
-		(ParamBool<px4::params::DSHOT_BIDIR_EN>) _param_bidirectional_enable
+		(ParamBool<px4::params::DSHOT_BIDIR_EN>) _param_bidirectional_enable,
+		(ParamBool<px4::params::DSHOT_EDT_EN>) _param_dshot_edt_en
 	)
 };

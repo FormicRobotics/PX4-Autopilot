@@ -8,3 +8,6 @@ param set-default BAT2_V_DIV 19.1
 
 param set-default BAT1_A_PER_V 0
 param set-default BAT2_A_PER_V 0
+
+# UAVCAN off by default: it must not run alongside bidirectional DShot on this board
+param set-default UAVCAN_ENABLE 0

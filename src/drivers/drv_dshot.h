@@ -62,6 +62,8 @@ typedef enum {
 	DShot_cmd_3d_mode_on,
 	DShot_cmd_settings_request, // Currently not implemented
 	DShot_cmd_save_settings,
+	DShot_cmd_extended_telemetry_enable  = 13, // EDT, needs to be sent at least 6 times in a row
+	DShot_cmd_extended_telemetry_disable = 14,
 	DShot_cmd_spin_direction_normal   = 20,
 	DShot_cmd_spin_direction_reversed = 21,
 	DShot_cmd_led0_on,      // BLHeli32 only
@@ -170,6 +172,42 @@ __EXPORT extern int up_bdshot_get_erpm(uint8_t channel, int *erpm);
  * @return <0 on error / not supported, 0 on offline, 1 on online
  */
 __EXPORT extern int up_bdshot_channel_status(uint8_t channel);
+
+
+/**
+ * Decode Extended DShot Telemetry (EDT) frames on the bidirectional dshot line.
+ *
+ * With this on, a frame from an ESC that is not an eRPM value is recognised, kept out of the eRPM
+ * and counted (shown by up_bdshot_status()). Off, every frame is treated as eRPM. This does not
+ * ask the ESC to send them, see DShot_cmd_extended_telemetry_enable.
+ *
+ * @param enabled	true to decode EDT frames
+ */
+__EXPORT extern void up_bdshot_set_edt_enabled(bool enabled);
+
+
+/** Extended DShot Telemetry frame types, in the order of the spec */
+typedef enum {
+	DSHOT_EDT_TEMPERATURE = 0,	///< 1 degC per LSB
+	DSHOT_EDT_VOLTAGE,		///< 0.25 V per LSB
+	DSHOT_EDT_CURRENT,		///< 1 A per LSB
+	DSHOT_EDT_DEBUG1,
+	DSHOT_EDT_DEBUG2,
+	DSHOT_EDT_STRESS,		///< unitless
+	DSHOT_EDT_STATUS,		///< bit 7 alert, bit 6 warning, bit 5 error, bits 3..0 max stress
+	DSHOT_EDT_NUM_TYPES
+} dshot_edt_type_t;
+
+/**
+ * Get the latest Extended DShot Telemetry value of a type received from a channel
+ *
+ * @param channel	Dshot channel
+ * @param type		which value
+ * @param value		raw value of the frame, see dshot_edt_type_t for the unit
+ * @param age_ms	how long ago it was received
+ * @return OK if a frame of that type has been received, <0 if not (or not supported)
+ */
+__EXPORT extern int up_bdshot_get_edt(uint8_t channel, dshot_edt_type_t type, uint8_t *value, uint32_t *age_ms);
 
 
 __END_DECLS

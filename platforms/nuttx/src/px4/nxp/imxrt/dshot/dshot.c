@@ -453,6 +453,21 @@ int up_bdshot_channel_status(uint8_t channel)
 	return -1;
 }
 
+void up_bdshot_set_edt_enabled(bool enabled)
+{
+	// EDT is not supported on this platform
+	(void)enabled;
+}
+
+int up_bdshot_get_edt(uint8_t channel, dshot_edt_type_t type, uint8_t *value, uint32_t *age_ms)
+{
+	(void)channel;
+	(void)type;
+	(void)value;
+	(void)age_ms;
+	return -ENOTSUP;
+}
+
 void up_bdshot_status(void)
 {
 
