@@ -22,3 +22,6 @@ icm20948 -s -b 1 -R 8 -M start
 
 # Interal DPS310 (barometer)
 dps310 -s -b 2 start
+
+# External magnetometer on GPS port I2C
+bmm150 start -X -b 1

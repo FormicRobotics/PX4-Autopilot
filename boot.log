@@ -1,0 +1,6 @@
+Connecting to MAVLINK...
+
+NuttShell (NSH) NuttX-11.0.0
+nsh> [K
+nsh> [Kreboot[6D[Kreboot
+device reports readiness to read but returned no data (device disconnected or multiple access on port?)
