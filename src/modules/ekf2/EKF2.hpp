@@ -88,6 +88,7 @@
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/yaw_estimator_status.h>
 #include <uORB/topics/formic_pos_req.h>
+#include <uORB/topics/formic_vehicle_odometry.h>
 
 #if defined(CONFIG_EKF2_AIRSPEED)
 # include <uORB/topics/airspeed.h>
@@ -329,6 +330,13 @@ private:
 	matrix::Vector3f _last_ev_bias_published{};
 
 	uORB::Subscription _ev_odom_sub{ORB_ID(vehicle_visual_odometry)};
+
+	// add by naor //
+	uORB::Subscription _formic_pos_req_sub{ORB_ID(formic_pos_req)};
+	bool _formic_pos_req_prev{false};
+	uORB::Subscription _formic_odom_sub{ORB_ID(formic_odom)};
+	uint64_t _formic_epoch_prev{0};	///< last VIO epoch seen, 0 = none yet
+	// add by naor //
 
 	uORB::PublicationMulti<estimator_bias3d_s> _estimator_ev_pos_bias_pub{ORB_ID(estimator_ev_pos_bias)};
 #endif // CONFIG_EKF2_EXTERNAL_VISION

@@ -2208,6 +2208,36 @@ bool EKF2::UpdateExtVisionSample(ekf2_timestamps_s &ekf2_timestamps)
 
 	///////add by naor ////////////////
 
+	// Expire the no-aid timeout immediately (instead of waiting EKF2_NOAID_TOUT) when:
+	// 1. leaving a position mode (formic_pos_req 1 -> 0): formic_watchdog_ev cuts the VIO feed,
+	//    so xy_valid must drop now and commander can't re-enter a position mode on a stale estimate.
+	// 2. the VIO epoch jumps (VIO re-initialized): the VIO frame moved, so the old aiding is void.
+	bool expire_ev_aiding = false;
+
+	formic_pos_req_s formic_pos_req;
+
+	if (_formic_pos_req_sub.update(&formic_pos_req)) {
+		if (_formic_pos_req_prev && !formic_pos_req.pos_req) {
+			expire_ev_aiding = true;
+		}
+
+		_formic_pos_req_prev = formic_pos_req.pos_req;
+	}
+
+	formic_vehicle_odometry_s formic_odom;
+
+	if (_formic_odom_sub.update(&formic_odom)) {
+		if ((_formic_epoch_prev != 0) && (formic_odom.epoch > _formic_epoch_prev)) {
+			expire_ev_aiding = true;
+		}
+
+		_formic_epoch_prev = formic_odom.epoch;
+	}
+
+	if (expire_ev_aiding) {
+		_ekf.forceEvAidingTimeout();
+	}
+
 	vehicle_odometry_s ev_odom;
 
 	if (_ev_odom_sub.update(&ev_odom)) {

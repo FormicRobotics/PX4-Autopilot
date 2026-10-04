@@ -371,6 +371,12 @@ public:
 
 	const BiasEstimator::status &getEvHgtBiasEstimatorStatus() const { return _ev_hgt_b_est.getStatus(); }
 	const BiasEstimator::status &getEvPosBiasEstimatorStatus(int i) const { return _ev_pos_b_est.getStatus(i); }
+
+	// add by naor //
+	// Position request dropped (formic_pos_req 1 -> 0) or VIO epoch jump: stop EV fusion and expire the
+	// horizontal no-aid timeout now instead of waiting EKF2_NOAID_TOUT on a dead feed.
+	void forceEvAidingTimeout();
+	// add by naor //
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 #if defined(CONFIG_EKF2_GNSS)

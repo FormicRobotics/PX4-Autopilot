@@ -36,6 +36,8 @@
 #include <parameters/param.h>
 #include <drivers/drv_hrt.h>
 
+using namespace time_literals;
+
 UserModeIntention::UserModeIntention(const vehicle_status_s &vehicle_status,
 				     const HealthAndArmingChecks &health_and_arming_checks, ModeChangeHandler *handler)
 	: _vehicle_status(vehicle_status), _health_and_arming_checks(health_and_arming_checks),
@@ -70,6 +72,13 @@ bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource
 		}
 
 		///////add by naor ////////////////
+		// canRun() alone is not enough for a position mode: after the EV feed is cut, EKF2 keeps
+		// reporting a valid position until EKF2_NOAID_TOUT expires. Require the same EV convergence
+		// gate that tick() uses, so a direct switch can't enter position mode on a stale estimate.
+		if (allow_change && modeRequiresPosition(user_intended_nav_state) && !evReadyForPosition()) {
+			allow_change = false;
+		}
+
 		// If change failed because position is not yet valid, park the request.
 		// tick() will retry, with no timeout, until position becomes valid and EKF converges.
 		if (!allow_change && modeRequiresPosition(user_intended_nav_state)) {
@@ -136,14 +145,9 @@ void UserModeIntention::tick()
 		return;
 	}
 
-	formic_ev_flag_s formic_ev_flag{};
-	_formic_ev_flag_sub.copy(&formic_ev_flag);
-
 	const bool pos_ok = _health_and_arming_checks.canRun(_pending_nav_state);
 
-	// Only require EV yaw fused when EV is actually being used (EKF2_IMU_CTRL != 0 and EV data arriving).
-	// If position comes from GPS or another non-EV source, ev_yaw_available is false and we skip the EV gate.
-	if (pos_ok && formic_ev_flag.ekfs_converged) {
+	if (pos_ok && evReadyForPosition()) {
 		const float elapsed_s = hrt_elapsed_time(&_pos_wait_start_us) * 1e-6f;
 		PX4_INFO("Position available - switching to pending mode %d after %.1f s", _pending_nav_state, (double)elapsed_s);
 		const uint8_t mode = _pending_nav_state;
@@ -179,6 +183,20 @@ void UserModeIntention::onFailsafeNavState()
 	_pending_nav_state = UINT8_MAX;
 	_pos_wait_start_us = 0;
 	publish_formic_pos_req(false);
+}
+
+bool UserModeIntention::evReadyForPosition()
+{
+	formic_ev_flag_s formic_ev_flag{};
+
+	if (!_formic_ev_flag_sub.copy(&formic_ev_flag)) {
+		return false;
+	}
+
+	// formic_watchdog_ev publishes every 10 ms - a stale flag means the watchdog is not running
+	const bool flag_fresh = hrt_elapsed_time(&formic_ev_flag.timestamp) < 100_ms;
+
+	return flag_fresh && formic_ev_flag.ev_data_arrived && formic_ev_flag.ekfs_converged;
 }
 
 void UserModeIntention::publish_formic_pos_req(bool pos_requested)

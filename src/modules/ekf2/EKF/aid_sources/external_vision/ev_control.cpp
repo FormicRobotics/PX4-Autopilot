@@ -119,6 +119,33 @@ void Ekf::controlExternalVisionFusion(const imuSample &imu_sample)
 	}
 }
 
+// add by naor //
+void Ekf::forceEvAidingTimeout()
+{
+	// drop any queued VIO samples so they can't restart fusion after the request was dropped
+	if (_ext_vision_buffer) {
+		_ext_vision_buffer->reset();
+	}
+
+	stopEvPosFusion();
+	stopEvVelFusion();
+	stopEvYawFusion();
+	stopEvHgtFusion();
+
+	_ev_q_error_initialized = false;
+	_ev_sample_prev = {};
+	_ev_pos_b_est.reset();
+	_ev_hgt_b_est.reset();
+
+	// Expire the dead-reckoning clock: if no other source aids horizontally,
+	// updateHorizontalDeadReckoningstatus() flags the solution invalid on the next update
+	// regardless of EKF2_NOAID_TOUT. Another active source (e.g. GNSS) restarts the clock.
+	_time_last_horizontal_aiding = 0;
+
+	ECL_WARN("vision aiding expired (pos request dropped or VIO epoch jump)");
+}
+// add by naor //
+
 void Ekf::updateEvAttitudeErrorFilter(extVisionSample &ev_sample, bool ev_reset)
 {
 	const Quatf q_error((_state.quat_nominal * ev_sample.quat.inversed()).normalized());

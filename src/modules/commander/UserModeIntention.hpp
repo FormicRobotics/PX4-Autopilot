@@ -114,6 +114,8 @@ private:
 	///////add by naor ////////////////
 	// Returns true if nav_state is one that requires local or global position.
 	bool modeRequiresPosition(uint8_t nav_state) const;
+	// True when formic_watchdog_ev reports fresh EV data and EKF/EV convergence.
+	bool evReadyForPosition();
 	void publish_formic_pos_req(bool pos_requested);
 	///////add by naor ////////////////
 
