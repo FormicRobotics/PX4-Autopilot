@@ -148,6 +148,10 @@ publications:
   type: px4_msgs::msg::FormicEvFlag
   rate_limit: 10
 
+- topic: /fmu/out/manual_control_switches
+  type: px4_msgs::msg::ManualControlSwitches
+  rate_limit: 50
+
 # Create uORB::Publication
 subscriptions:
 # - topic: /fmu/in/register_ext_component_request
