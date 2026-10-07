@@ -161,7 +161,7 @@ struct RcvTopicsPubs {
 @[    end for]@
 
 @[    for sub in subscriptions_multi]@
-	uORB::PublicationMulti<@(sub['simple_base_type'])_s> @(sub['topic_simple'])_pub{ORB_ID(@(sub['topic_simple']))};
+	uORB::PublicationMulti<@(sub['simple_base_type'])_s> @(sub['topic_simple'])_pub{ORB_ID(@(sub['simple_base_type']))};
 @[    end for]@
 
 	uint32_t num_payload_received{};

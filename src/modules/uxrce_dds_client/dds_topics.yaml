@@ -234,6 +234,14 @@ subscriptions:
 
 
 # Create uORB::PublicationMulti
+# Each DDS topic below is published to its own uORB instance of the message type
+# (e.g. /fmu/in/distance_sensor_1 -> distance_sensor instance N)
 subscriptions_multi:
-- topic: /fmu/in/distance_sensor
+- topic: /fmu/in/distance_sensor_1
+  type: px4_msgs::msg::DistanceSensor
+
+- topic: /fmu/in/distance_sensor_2
+  type: px4_msgs::msg::DistanceSensor
+
+- topic: /fmu/in/distance_sensor_3
   type: px4_msgs::msg::DistanceSensor
