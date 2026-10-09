@@ -183,6 +183,10 @@ bool SerialImpl::configure()
 	/* no parity, one stop bit, disable flow control */
 	uart_config.c_cflag &= ~(CSTOPB | PARENB | CRTSCTS);
 
+	if (_stopbits == StopBits::Two) {
+		uart_config.c_cflag |= CSTOPB;
+	}
+
 	/* set baud rate */
 	if ((termios_state = cfsetispeed(&uart_config, speed)) < 0) {
 		PX4_ERR("ERR: %d (cfsetispeed)", termios_state);
@@ -233,7 +237,7 @@ bool SerialImpl::open()
 
 	// Do pin operations after port has been opened
 	if (_single_wire_mode) {
-		setSingleWireMode();
+		setSingleWireMode(_single_wire_push_pull);
 	}
 
 	if (_swap_rx_tx_mode) {
@@ -506,7 +510,19 @@ StopBits SerialImpl::getStopbits() const
 
 bool SerialImpl::setStopbits(StopBits stopbits)
 {
-	return stopbits == StopBits::One;
+	// check if already configured
+	if ((stopbits == _stopbits) && _open) {
+		return true;
+	}
+
+	_stopbits = stopbits;
+
+	// process stopbits change now if port is already open
+	if (_open) {
+		return configure();
+	}
+
+	return true;
 }
 
 FlowControl SerialImpl::getFlowcontrol() const
@@ -524,15 +540,16 @@ bool SerialImpl::getSingleWireMode() const
 	return _single_wire_mode;
 }
 
-bool SerialImpl::setSingleWireMode()
+bool SerialImpl::setSingleWireMode(bool push_pull)
 {
 #if defined(TIOCSSINGLEWIRE)
 
 	if (_open) {
-		ioctl(_serial_fd, TIOCSSINGLEWIRE, SER_SINGLEWIRE_ENABLED);
+		ioctl(_serial_fd, TIOCSSINGLEWIRE, SER_SINGLEWIRE_ENABLED | (push_pull ? SER_SINGLEWIRE_PUSHPULL : 0));
 	}
 
 	_single_wire_mode = true;
+	_single_wire_push_pull = push_pull;
 	return true;
 #else
 	return false;

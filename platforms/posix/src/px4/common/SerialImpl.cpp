@@ -505,7 +505,7 @@ bool SerialImpl::getSingleWireMode() const
 	return _single_wire_mode;
 }
 
-bool SerialImpl::setSingleWireMode()
+bool SerialImpl::setSingleWireMode(bool push_pull)
 {
 #if defined(TIOCSSINGLEWIRE)
 
