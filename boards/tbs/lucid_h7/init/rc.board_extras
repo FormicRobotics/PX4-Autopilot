@@ -6,5 +6,10 @@
 # Retry commander if it failed to start during boot (timeout issue)
 # This is a workaround for commander thread creation timeout during boot
 
-
+# CDCACM_AUTOSTART is not built for this board (it requires a VBUS-sense
+# GPIO that isn't wired on this board), so rcS's normal USB auto-start
+# block never runs. Switch the USB port over to the app (from the
+# bootloader's CDC/ACM identity) and start MAVLink on it unconditionally.
+sercon
+mavlink start -d /dev/ttyACM0
 

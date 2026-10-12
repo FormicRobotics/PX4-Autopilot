@@ -37,13 +37,13 @@
 
 constexpr px4_spi_bus_t px4_spi_buses[SPI_BUS_MAX_BUS_ITEMS] = {
 	initSPIBus(SPI::Bus::SPI1, {
-		initSPIDevice(DRV_IMU_DEVTYPE_ICM42688, SPI::CS{GPIO::PortC, GPIO::Pin15}),
+		initSPIDevice(DRV_IMU_DEVTYPE_ICM42688P, SPI::CS{GPIO::PortC, GPIO::Pin15}),
 	}),
 	initSPIBus(SPI::Bus::SPI2, {
 		// SPI2 is used for MAX7456 OSD, but not handled by PX4 directly
 	}),
 	initSPIBus(SPI::Bus::SPI4, {
-		initSPIDevice(DRV_IMU_DEVTYPE_ICM42688, SPI::CS{GPIO::PortE, GPIO::Pin11}),
+		initSPIDevice(DRV_IMU_DEVTYPE_ICM42688P, SPI::CS{GPIO::PortE, GPIO::Pin11}),
 	}),
 };
 
