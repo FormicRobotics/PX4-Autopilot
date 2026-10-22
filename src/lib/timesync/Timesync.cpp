@@ -58,7 +58,7 @@ void Timesync::update(const uint64_t now_us, const int64_t remote_timestamp_ns, 
 
 		if (rtt_us < MAX_RTT_SAMPLE) {	// Only use samples with low RTT
 
-			if (sync_converged() && (deviation > MAX_DEVIATION_SAMPLE)) {
+			if (filter_converged() && (deviation > MAX_DEVIATION_SAMPLE)) {
 
 				// Increment the counter if we have a good estimate and are getting samples far from the estimate
 				_high_deviation_count++;
@@ -74,7 +74,7 @@ void Timesync::update(const uint64_t now_us, const int64_t remote_timestamp_ns, 
 			} else {
 
 				// Filter gain scheduling
-				if (!sync_converged()) {
+				if (!filter_converged()) {
 					// Interpolate with a sigmoid function
 					double progress = (double)_sequence / (double)CONVERGENCE_WINDOW;
 					double p = 1.0 - exp(0.5 * (1.0 - 1.0 / (1.0 - progress)));
@@ -125,7 +125,7 @@ uint64_t Timesync::sync_stamp(uint64_t usec)
 {
 	// Only return synchronised stamp if we have converged to a good value
 	if (sync_converged()) {
-		return usec + (int64_t)_time_offset;
+		return usec + offset();
 
 	} else {
 		return hrt_absolute_time();
