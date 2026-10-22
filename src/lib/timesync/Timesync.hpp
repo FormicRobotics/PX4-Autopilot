@@ -104,13 +104,39 @@ public:
 	 */
 	uint64_t sync_stamp(uint64_t usec);
 
-	int64_t offset() const { return (int64_t)_time_offset; }
+	/**
+	 * Offset applied to remote timestamps (usec): the external offset when one is set,
+	 * the round-trip filter estimate otherwise
+	 */
+	int64_t offset() const { return _external_offset_valid ? _external_offset : (int64_t)_time_offset; }
 
 	/**
-	 * Return true if the timesync algorithm converged to a good estimate,
-	 * return false otherwise
+	 * Offset of the round-trip filter alone (usec), for comparison with an external source
 	 */
-	bool sync_converged() const { return _sequence >= CONVERGENCE_WINDOW; }
+	int64_t filter_offset() const { return (int64_t)_time_offset; }
+
+	/**
+	 * Return true if a usable offset exists: an external one, or a converged round-trip filter
+	 */
+	bool sync_converged() const { return _external_offset_valid || filter_converged(); }
+
+	/**
+	 * Return true if the round-trip filter converged to a good estimate
+	 */
+	bool filter_converged() const { return _sequence >= CONVERGENCE_WINDOW; }
+
+	/**
+	 * Use an offset measured by another source (the camera strobe sync) in place of the
+	 * round-trip estimate. The round-trip filter keeps running for comparison.
+	 */
+	void set_external_offset(int64_t offset_us) { _external_offset = offset_us; _external_offset_valid = true; }
+
+	/**
+	 * Go back to the round-trip estimate
+	 */
+	void clear_external_offset() { _external_offset_valid = false; }
+
+	bool has_external_offset() const { return _external_offset_valid; }
 
 	/**
 	 * Reset the exponential filter and its states
@@ -131,6 +157,10 @@ private:
 	// Timesync statistics
 	double _time_offset{0};
 	double _time_skew{0};
+
+	// External offset (usec), see set_external_offset()
+	int64_t _external_offset{0};
+	bool _external_offset_valid{false};
 
 	// Filter parameters
 	double _filter_alpha{ALPHA_GAIN_INITIAL};

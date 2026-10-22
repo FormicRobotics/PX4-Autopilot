@@ -640,6 +640,14 @@ else
 	formic_watchdog_ev start
 
 	#
+	# Start the strobe-based camera timesync (needs camera_capture).
+	#
+	if param greater -s CAMTS_EN 0
+	then
+		camera_timesync start
+	fi
+
+	#
 	# Start the flip after crash module.
 	# Module stays running and waits for aux switch to be pressed.
 	#

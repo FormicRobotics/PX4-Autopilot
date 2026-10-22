@@ -34,9 +34,14 @@ publications:
 
 - topic: /fmu/out/sensor_combined
   type: px4_msgs::msg::SensorCombined
-  #- topic: /fmu/out/timesync_status
-  # type: px4_msgs::msg::TimesyncStatus
-  # rate_limit: 10
+
+- topic: /fmu/out/timesync_status
+  type: px4_msgs::msg::TimesyncStatus
+  rate_limit: 10
+
+- topic: /fmu/out/camera_timesync_status
+  type: px4_msgs::msg::CameraTimesyncStatus
+  rate_limit: 100
 
 - topic: /fmu/out/vehicle_angular_velocity
   type: px4_msgs::msg::VehicleAngularVelocity
@@ -213,6 +218,9 @@ subscriptions:
 
 - topic: /fmu/in/vehicle_command
   type: px4_msgs::msg::VehicleCommand
+
+- topic: /fmu/in/camera_frame_stamp
+  type: px4_msgs::msg::CameraFrameStamp
 
 - topic: /fmu/in/vehicle_command_mode_executor
   type: px4_msgs::msg::VehicleCommand

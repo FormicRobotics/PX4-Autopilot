@@ -599,6 +599,37 @@ void UxrceddsClient::resetConnectivityCounters()
 	_num_rx_rate_zero = 0;
 }
 
+void UxrceddsClient::applyCameraTimesync(uxrSession *session)
+{
+	// camera_timesync measures the offset from the camera strobe the flight controller
+	// captures and the frame stamp the companion sends: no link latency in the measurement.
+	// While it is locked it replaces the round-trip estimate; it falls back when the
+	// status goes stale.
+	camera_timesync_status_s status;
+
+	if (_camera_timesync_status_sub.update(&status)) {
+		if (status.apply && status.state == camera_timesync_status_s::STATE_LOCKED) {
+			if (!_timesync.has_external_offset()) {
+				PX4_INFO("using camera timesync offset %lld us (round-trip %lld us)",
+					 (long long)status.estimated_offset, (long long)_timesync.filter_offset());
+			}
+
+			_timesync.set_external_offset(status.estimated_offset);
+			_last_camera_timesync = status.timestamp;
+
+		} else if (_timesync.has_external_offset()) {
+			PX4_INFO("camera timesync not locked, back to round-trip offset");
+			_timesync.clear_external_offset();
+		}
+
+	} else if (_timesync.has_external_offset() && hrt_elapsed_time(&_last_camera_timesync) > 2_s) {
+		PX4_INFO("camera timesync stale, back to round-trip offset");
+		_timesync.clear_external_offset();
+	}
+
+	session->time_offset = -_timesync.offset() * 1000; // us -> ns
+}
+
 void UxrceddsClient::syncSystemClock(uxrSession *session)
 {
 	struct timespec ts = {};
@@ -709,6 +740,11 @@ void UxrceddsClient::run()
 
 			// check if there are available replies
 			process_replies();
+
+			// strobe-based offset from camera_timesync, when it is locked
+			if (_synchronize_timestamps) {
+				applyCameraTimesync(&session);
+			}
 
 			// time sync session
 			if (_synchronize_timestamps && hrt_elapsed_time(&last_sync_session) > 1_s) {
@@ -990,6 +1026,8 @@ int UxrceddsClient::print_status()
 	}
 
 	PX4_INFO("timesync converged: %s", _timesync.sync_converged() ? "true" : "false");
+	PX4_INFO("time offset: %lld us (%s), round-trip estimate %lld us", (long long)_timesync.offset(),
+		 _timesync.has_external_offset() ? "camera strobe" : "round-trip", (long long)_timesync.filter_offset());
 
 	perf_print_counter(_loop_perf);
 	perf_print_counter(_loop_interval_perf);

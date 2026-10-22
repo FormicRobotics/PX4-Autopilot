@@ -50,7 +50,9 @@ set(msg_files
 	BatteryInfo.msg
 	ButtonEvent.msg
 	CameraCapture.msg
+	CameraFrameStamp.msg
 	CameraStatus.msg
+	CameraTimesyncStatus.msg
 	CameraTrigger.msg
 	CanInterfaceStatus.msg
 	CellularStatus.msg
