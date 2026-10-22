@@ -37,19 +37,16 @@ constexpr io_timers_t io_timers[MAX_IO_TIMERS] = {
     // index‑0 ─ TIM3  : DMA1 / Stream‑2 / Channel‑5  (PWM 1-2: PB0, PB1)
     initIOTimer(Timer::Timer3,  DMA{DMA::Index1, DMA::Stream2, DMA::Channel5}),
 
-    // index‑1 ─ TIM2  : DMA1 / Stream‑X / Channel‑X  (PWM 3-4: PA0, PA1)
+    // index‑1 ─ TIM2  : DMA1  (PWM 3-6: PA0, PA1, PA2, PA3 - shared timer/DMA stream for bidir DShot)
     initIOTimer(Timer::Timer2,  DMA{DMA::Index1}),
 
-    // index‑2 ─ TIM5  : DMA1 / Stream‑0 / Channel‑6  (PWM 5-6: PA2, PA3)
-    initIOTimer(Timer::Timer5,  DMA{DMA::Index1, DMA::Stream0, DMA::Channel6}),
-
-    // index‑3 ─ TIM4  : DMA1 / Stream‑6 / Channel‑2  (PWM 7-10: PD12-PD15)
+    // index‑2 ─ TIM4  : DMA1 / Stream‑6 / Channel‑2  (PWM 7-10: PD12-PD15)
     initIOTimer(Timer::Timer4,  DMA{DMA::Index1, DMA::Stream6, DMA::Channel2}),
 
-    // index‑4 ─ TIM15 : Aux 11‑12  (PWM 11-12: PE5, PE6 - NODMA for LED)
+    // index‑3 ─ TIM15 : Aux 11‑12  (PWM 11-12: PE5, PE6 - NODMA for LED)
     initIOTimer(Timer::Timer15),
 
-    // index‑5 ─ TIM1  : LED PWM 13 (PA8 - WS2812)
+    // index‑4 ─ TIM1  : LED PWM 13 (PA8 - WS2812)
     initIOTimer(Timer::Timer1,  DMA{DMA::Index1}),
 };
 
@@ -59,13 +56,11 @@ constexpr timer_io_channels_t timer_io_channels[MAX_TIMER_IO_CHANNELS] = {
     initIOTimerChannel(io_timers, {Timer::Timer3, Timer::Channel3}, {GPIO::PortB, GPIO::Pin0}),
     initIOTimerChannel(io_timers, {Timer::Timer3, Timer::Channel4}, {GPIO::PortB, GPIO::Pin1}),
 
-    // ─── TIM2 : PWM 3-4 (PA0, PA1) ────────────────────────────────────────────
+    // ─── TIM2 : PWM 3-6 (PA0, PA1, PA2, PA3) ──────────────────────────────────
     initIOTimerChannel(io_timers, {Timer::Timer2, Timer::Channel1}, {GPIO::PortA, GPIO::Pin0}),
     initIOTimerChannel(io_timers, {Timer::Timer2, Timer::Channel2}, {GPIO::PortA, GPIO::Pin1}),
-
-    // ─── TIM5 : PWM 5-6 (PA2, PA3) ────────────────────────────────────────────
-    initIOTimerChannel(io_timers, {Timer::Timer5, Timer::Channel3}, {GPIO::PortA, GPIO::Pin2}),
-    initIOTimerChannel(io_timers, {Timer::Timer5, Timer::Channel4}, {GPIO::PortA, GPIO::Pin3}),
+    initIOTimerChannel(io_timers, {Timer::Timer2, Timer::Channel3}, {GPIO::PortA, GPIO::Pin2}),
+    initIOTimerChannel(io_timers, {Timer::Timer2, Timer::Channel4}, {GPIO::PortA, GPIO::Pin3}),
 
     // ─── TIM4 : PWM 7-10 (PD12-PD15) ──────────────────────────────────────────
     initIOTimerChannel(io_timers, {Timer::Timer4, Timer::Channel1}, {GPIO::PortD, GPIO::Pin12}),

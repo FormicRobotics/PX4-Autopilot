@@ -55,5 +55,23 @@
   "C_Cpp_Runner.useLeakSanitizer": false,
   "C_Cpp_Runner.showCompilationTime": false,
   "C_Cpp_Runner.useLinkTimeOptimization": false,
-  "C_Cpp_Runner.msvcSecureNoWarnings": false
+  "C_Cpp_Runner.msvcSecureNoWarnings": false,
+  "cmake.sourceDirectory": "/home/naor/Desktop/formic/PX4-Autopilot/boards/tbs/lucid_h7",
+  "ROS2.distro": "humble",
+  "python.autoComplete.extraPaths": [
+    "/home/naor/git/control_sim/Drone_Op/install/sim_kamikazi/local/lib/python3.10/dist-packages",
+    "/home/naor/git/control_sim/Drone_Op/install/stl_helper/local/lib/python3.10/dist-packages",
+    "/home/naor/git/control_sim/Drone_Op/install/px4_keyboard_control/lib/python3.10/site-packages",
+    "/home/naor/git/control_sim/Drone_Op/install/px4_msgs/local/lib/python3.10/dist-packages",
+    "/opt/ros/humble/lib/python3.10/site-packages",
+    "/opt/ros/humble/local/lib/python3.10/dist-packages"
+  ],
+  "python.analysis.extraPaths": [
+    "/home/naor/git/control_sim/Drone_Op/install/sim_kamikazi/local/lib/python3.10/dist-packages",
+    "/home/naor/git/control_sim/Drone_Op/install/stl_helper/local/lib/python3.10/dist-packages",
+    "/home/naor/git/control_sim/Drone_Op/install/px4_keyboard_control/lib/python3.10/site-packages",
+    "/home/naor/git/control_sim/Drone_Op/install/px4_msgs/local/lib/python3.10/dist-packages",
+    "/opt/ros/humble/lib/python3.10/site-packages",
+    "/opt/ros/humble/local/lib/python3.10/dist-packages"
+  ]
 }

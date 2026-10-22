@@ -122,8 +122,8 @@
 
 /* PWM
  * TIM3: 2 channels (PWM 1-2: PB0, PB1)
- * TIM2: 2 channels (PWM 3-4: PA0, PA1)
- * TIM5: 2 channels (PWM 5-6: PA2, PA3)
+ * TIM2: 4 channels (PWM 3-6: PA0-PA3) - merged with former TIM5 group so
+ *        S3-S6 share one timer/DMA stream (needed for bidir DShot below)
  * TIM4: 4 channels (PWM 7-10: PD12-PD15)
  * TIM15: 2 channels (PWM 11-12: PE5, PE6)
  * TIM1: 1 channel (PWM 13: PA8 - WS2812 LED)
@@ -137,12 +137,11 @@
 
 /*
  * Bidirectional DShot only supports a single timer (see _bidi_timer_index in
- * dshot.c). Timer index 3 is TIM4 (PWM 7-10: S7-S10), which has 4 channels -
- * more than any other timer on this board - so it's used as the bidir group.
- * (Channel 4 / S10 has no DMA capture line on STM32H7 and is skipped by the
- * driver's round-robin.)
+ * dshot.c). Timer index 1 is TIM2 (PWM 3-6: S3-S6, PA0-PA3), which has 4
+ * channels sharing one DMA stream - used as the bidir group for motor
+ * telemetry. S1/S2 (TIM3) and S7-S10 (TIM4) remain non-bidirectional.
  */
-#define BOARD_BIDIRECTIONAL_DSHOT_TIMER_INDEX 3
+#define BOARD_BIDIRECTIONAL_DSHOT_TIMER_INDEX 1
 
 /* Spare GPIO */
 
@@ -206,7 +205,7 @@
 
 #define BOARD_ENABLE_CONSOLE_BUFFER
 
-#define BOARD_NUM_IO_TIMERS 6
+#define BOARD_NUM_IO_TIMERS 5
 
 __BEGIN_DECLS
 

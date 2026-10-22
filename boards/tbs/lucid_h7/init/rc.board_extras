@@ -13,3 +13,17 @@
 sercon
 mavlink start -d /dev/ttyACM0
 
+# AT7456E analog OSD on SPI2 (set OSD_ATXXXX_CFG to 1=NTSC or 2=PAL to enable)
+if ! param compare OSD_ATXXXX_CFG 0
+then
+	atxxxx start -s
+fi
+
+
+# Analog camera switch on PD11: TBS_CAM_SWITCH 1-6 = RC AUX channel, 0 = camera 1
+if param compare TBS_CAM_SWITCH 0
+then
+	camera_switch set 1
+else
+	camera_switch start
+fi
