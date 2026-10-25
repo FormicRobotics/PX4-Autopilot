@@ -188,6 +188,18 @@ void getVehicleControlMode(uint8_t nav_state, uint8_t vehicle_type,
 		vehicle_control_mode.flag_control_allocation_enabled = true;
 		break;
 
+	case vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER:
+		// Thrust and attitude are fully computed by the formic_tracker module
+		// itself (from formic_tracker_setpoint), not by mc_pos_control - same
+		// flag set as NAVIGATION_STATE_OFFBOARD's offboard_control_mode.attitude
+		// branch above, not FORMIC_ALT_HOLD's (no altitude/climb_rate/manual
+		// flags: nothing here should let mc_pos_control's z-loop fight for
+		// thrust_body).
+		vehicle_control_mode.flag_control_attitude_enabled = true;
+		vehicle_control_mode.flag_control_rates_enabled = true;
+		vehicle_control_mode.flag_control_allocation_enabled = true;
+		break;
+
 	// vehicle_status_s::NAVIGATION_STATE_EXTERNALx: handled in ModeManagement
 	default:
 		break;

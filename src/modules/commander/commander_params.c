@@ -1083,5 +1083,21 @@ PARAM_DEFINE_INT32(COM_MODE_ARM_CHK, 0);
  */
 PARAM_DEFINE_INT32(FORMIC_VIO_MF, 5);
 
+/**
+ * formic_tracker setpoint loss timeout
+ *
+ * Maximum age of the last received formic_tracker_setpoint message before
+ * NAVIGATION_STATE_FORMIC_TRACKER is considered to have lost its command
+ * stream: blocks entering the mode without a live setpoint, and forces a
+ * fallback to FormicAltHold if it goes stale mid-flight.
+ *
+ * @group Commander
+ * @unit s
+ * @min 0
+ * @max 10
+ * @increment 0.01
+ */
+PARAM_DEFINE_FLOAT(FMTRK_LOSS_T, 0.5f);
+
 
 

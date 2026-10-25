@@ -59,6 +59,7 @@ static inline uint32_t getValidNavStates()
 	       (1u << vehicle_status_s::NAVIGATION_STATE_OFFBOARD) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_STAB) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_FORMIC_ALT_HOLD) |
+	       (1u << vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_AUTO_LAND) |
 	       (1u << vehicle_status_s::NAVIGATION_STATE_AUTO_FOLLOW_TARGET) |
@@ -81,7 +82,7 @@ const char *const nav_state_names[vehicle_status_s::NAVIGATION_STATE_MAX] = {
 	"Altitude Cruise",
 	"9: unallocated",
 	"Acro",
-	"11: UNUSED",
+	"Formic Tracker",
 	"Descend",
 	"Termination",
 	"Offboard",

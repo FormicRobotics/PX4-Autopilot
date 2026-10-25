@@ -54,6 +54,7 @@ void getModeRequirements(uint8_t vehicle_type, failsafe_flags_s &flags)
 	flags.mode_req_local_alt = 0;
 	flags.mode_req_mission = 0;
 	flags.mode_req_offboard_signal = 0;
+	flags.mode_req_formic_tracker_signal = 0;
 	flags.mode_req_home_position = 0;
 	flags.mode_req_wind_and_flight_time_compliance = 0;
 	flags.mode_req_prevent_arming = 0;
@@ -94,6 +95,14 @@ void getModeRequirements(uint8_t vehicle_type, failsafe_flags_s &flags)
 	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_ALT_HOLD, flags.mode_req_attitude);
 	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_ALT_HOLD, flags.mode_req_local_alt);
 	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_ALT_HOLD, flags.mode_req_manual_control);
+
+	// NAVIGATION_STATE_FORMIC_TRACKER - never stick-driven (no mode_req_manual_control),
+	// gated instead on a live formic_tracker_setpoint stream (mode_req_formic_tracker_signal,
+	// same mechanism as NAVIGATION_STATE_OFFBOARD's mode_req_offboard_signal below).
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER, flags.mode_req_angular_velocity);
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER, flags.mode_req_attitude);
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER, flags.mode_req_local_alt);
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER, flags.mode_req_formic_tracker_signal);
 
 	// NAVIGATION_STATE_AUTO_MISSION
 	setRequirement(vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION, flags.mode_req_angular_velocity);

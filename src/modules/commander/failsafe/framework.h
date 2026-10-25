@@ -56,6 +56,7 @@ public:
 
 		// Fallbacks
 		FallbackPosCtrl,
+		FallbackFormicAltHold,
 		FallbackAltCtrl,
 		FallbackStab,
 
@@ -96,6 +97,8 @@ public:
 		case Action::Warn: return "Warn";
 
 		case Action::FallbackPosCtrl: return "Fallback to PosCtrl";
+
+		case Action::FallbackFormicAltHold: return "Fallback to FormicAltHold";
 
 		case Action::FallbackAltCtrl: return "Fallback to AltCtrl";
 

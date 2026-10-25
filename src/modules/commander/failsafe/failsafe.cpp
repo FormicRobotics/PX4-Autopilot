@@ -671,6 +671,17 @@ FailsafeBase::Action Failsafe::checkModeFallback(const failsafe_flags_s &status_
 		}
 	}
 
+	// formic_tracker signal lost -> FormicAltHold (their stick-driven altitude
+	// hold), same shape as the offboard-signal block above but with no
+	// Action::Disarm option: losing this stream is expected to happen (the
+	// companion computer stopping or the operator closing its valve), not a
+	// reason to disarm mid-flight.
+	if (status_flags.formic_tracker_signal_lost
+	    && (status_flags.mode_req_formic_tracker_signal & (1u << user_intended_mode))) {
+		action = Action::FallbackFormicAltHold;
+		user_intended_mode = vehicle_status_s::NAVIGATION_STATE_FORMIC_ALT_HOLD;
+	}
+
 	// PosCtrl/PositionSlow -> AltCtrl
 	if ((user_intended_mode == vehicle_status_s::NAVIGATION_STATE_POSCTL ||
 	     user_intended_mode == vehicle_status_s::NAVIGATION_STATE_POSITION_SLOW)

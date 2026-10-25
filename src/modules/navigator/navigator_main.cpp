@@ -826,6 +826,7 @@ void Navigator::run()
 		case vehicle_status_s::NAVIGATION_STATE_ALTITUDE_CRUISE:
 		case vehicle_status_s::NAVIGATION_STATE_POSCTL:
 		case vehicle_status_s::NAVIGATION_STATE_FORMIC_ALT_HOLD:
+		case vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER:
 		case vehicle_status_s::NAVIGATION_STATE_TURTLE:
 		case vehicle_status_s::NAVIGATION_STATE_DESCEND:
 		case vehicle_status_s::NAVIGATION_STATE_TERMINATION:

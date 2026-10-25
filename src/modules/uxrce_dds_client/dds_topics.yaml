@@ -219,6 +219,9 @@ subscriptions:
 - topic: /fmu/in/vehicle_command
   type: px4_msgs::msg::VehicleCommand
 
+- topic: /fmu/in/formic_tracker_setpoint
+  type: px4_msgs::msg::FormicTrackerSetpoint
+
 - topic: /fmu/in/camera_frame_stamp
   type: px4_msgs::msg::CameraFrameStamp
 

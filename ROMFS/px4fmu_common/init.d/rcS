@@ -640,6 +640,13 @@ else
 	formic_watchdog_ev start
 
 	#
+	# Start the formic_tracker module (NAVIGATION_STATE_FORMIC_TRACKER's
+	# attitude+climb-rate setpoint generator - idles/publishes nothing
+	# unless that nav_state is active).
+	#
+	formic_tracker start
+
+	#
 	# Start the strobe-based camera timesync (needs camera_capture).
 	#
 	if param greater -s CAMTS_EN 0

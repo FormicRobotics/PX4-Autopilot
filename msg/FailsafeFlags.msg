@@ -15,6 +15,7 @@ uint32 mode_req_global_position
 uint32 mode_req_global_position_relaxed
 uint32 mode_req_mission
 uint32 mode_req_offboard_signal
+uint32 mode_req_formic_tracker_signal
 uint32 mode_req_home_position
 uint32 mode_req_wind_and_flight_time_compliance # if set, mode cannot be entered if wind or flight time limit exceeded
 uint32 mode_req_prevent_arming    # if set, cannot arm while in this mode
@@ -33,6 +34,7 @@ bool global_position_invalid          # Global position estimate invalid
 bool global_position_invalid_relaxed  # Global position estimate invalid with relaxed accuracy requirements
 bool auto_mission_missing             # No mission available
 bool offboard_control_signal_lost     # Offboard signal lost
+bool formic_tracker_signal_lost       # formic_tracker_setpoint stream lost/stale
 bool home_position_invalid            # No home position available
 
 # Control links

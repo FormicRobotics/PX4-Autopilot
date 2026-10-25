@@ -282,6 +282,7 @@ set(msg_files
 	totalArmTime.msg
 	FormicEvFlag.msg
 	FormicPosReq.msg
+	FormicTrackerSetpoint.msg
 )
 
 list(SORT msg_files)

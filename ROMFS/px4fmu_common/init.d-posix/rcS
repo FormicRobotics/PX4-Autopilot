@@ -283,6 +283,11 @@ fi
 # so the parameter can be toggled at runtime without changing the startup script.
 formic_watchdog_ev start
 
+# formic_tracker: NAVIGATION_STATE_FORMIC_TRACKER's attitude+climb-rate
+# setpoint generator. Always started; it idles and publishes nothing unless
+# that nav_state is actually active.
+formic_tracker start
+
 if ! pwm_out_sim start -m sim
 then
 	tune_control play error
