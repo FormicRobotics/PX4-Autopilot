@@ -928,6 +928,9 @@
  
 				 } else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_OFFBOARD) {
 					 desired_nav_state = vehicle_status_s::NAVIGATION_STATE_OFFBOARD;
+
+				 } else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_FORMIC_TRACKER) {
+					 desired_nav_state = vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER;
 				 }
  
 			 } else {

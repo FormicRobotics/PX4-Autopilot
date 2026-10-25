@@ -286,6 +286,7 @@ set(msg_files
 	FormicImuBatch.msg
 	FormicPosReq.msg
 	FormicVioEstStatus.msg
+	FormicTrackerSetpoint.msg
 )
 
 list(SORT msg_files)
