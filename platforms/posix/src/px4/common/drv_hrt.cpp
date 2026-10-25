@@ -84,6 +84,19 @@ __EXPORT uint32_t latency_counters[LATENCY_BUCKET_COUNT + 1];
 static px4_sem_t 	_hrt_lock;
 static struct work_s	_hrt_work;
 
+/*
+ * The call hrt_call_invoke() is currently running unlocked, and whether
+ * hrt_call_internal() re-armed it meanwhile (both protected by _hrt_lock).
+ * Unlike NuttX, where callouts run in interrupt context, here another thread
+ * can re-arm the entry while its callout runs - e.g. a ScheduledWorkItem whose
+ * Run(), woken by this very callout, calls ScheduleOnInterval(). The entry is
+ * then already queued, and re-entering it a second time would link it into
+ * callout_queue twice, silently dropping every call queued between the two
+ * positions (they are never invoked again).
+ */
+static struct hrt_call	*_invoking_call;
+static bool		_invoking_call_rearmed;
+
 static void hrt_latency_update();
 
 static void hrt_call_reschedule();
@@ -359,6 +372,10 @@ hrt_call_internal(struct hrt_call *entry, hrt_abstime deadline, hrt_abstime inte
 	/*}*/
 
 #endif
+	if (entry == _invoking_call) {
+		_invoking_call_rearmed = true;
+	}
+
 	entry->deadline = deadline;
 	entry->period = interval;
 	entry->callout = callout;
@@ -439,6 +456,9 @@ hrt_call_invoke()
 		call->deadline = 0;
 
 		/* invoke the callout (if there is one) */
+		_invoking_call = call;
+		_invoking_call_rearmed = false;
+
 		if (call->callout) {
 			// Unlock so we don't deadlock in callback
 			hrt_unlock();
@@ -449,8 +469,11 @@ hrt_call_invoke()
 			hrt_lock();
 		}
 
-		/* if the callout has a non-zero period, it has to be re-entered */
-		if (call->period != 0) {
+		_invoking_call = nullptr;
+
+		/* if the callout has a non-zero period, it has to be re-entered -
+		 * unless another thread already re-armed (and so re-queued) it */
+		if (call->period != 0 && !_invoking_call_rearmed) {
 			// re-check call->deadline to allow for
 			// callouts to re-schedule themselves
 			// using hrt_call_delay()
