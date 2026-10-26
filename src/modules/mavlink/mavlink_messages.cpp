@@ -75,6 +75,7 @@
 #include "streams/ESTIMATOR_STATUS.hpp"
 #include "streams/EXTENDED_SYS_STATE.hpp"
 #include "streams/FLIGHT_INFORMATION.hpp"
+#include "streams/FORMIC_EV_FLAG.hpp"
 #if defined(MAVLINK_MSG_ID_GLOBAL_POSITION)
 #include "streams/GLOBAL_POSITION.hpp"
 #endif //MAVLINK_MSG_ID_GLOBAL_POSITION
@@ -390,6 +391,9 @@ static const StreamListItem streams_list[] = {
 #if defined(NAMED_VALUE_FLOAT_HPP)
 	create_stream_list_item<MavlinkStreamNamedValueFloat>(),
 #endif // NAMED_VALUE_FLOAT_HPP
+#if defined(FORMIC_EV_FLAG_HPP)
+	create_stream_list_item<MavlinkStreamFormicEvFlag>(),
+#endif // FORMIC_EV_FLAG_HPP
 #if defined(DEBUG_HPP)
 	create_stream_list_item<MavlinkStreamDebug>(),
 #endif // DEBUG_HPP
