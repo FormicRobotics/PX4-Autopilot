@@ -60,6 +60,7 @@ using matrix::Vector3f;
 using matrix::wrap_pi;
 
 using math::Utilities::getEulerYaw;
+using math::Utilities::getEulerYawInSequenceOf;
 using math::Utilities::quatToInverseRotMat;
 using math::Utilities::shouldUse321RotationSequence;
 using math::Utilities::sq;

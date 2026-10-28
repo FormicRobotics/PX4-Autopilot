@@ -44,7 +44,10 @@ void Ekf::controlEvYawFusion(const imuSample &imu_sample, const extVisionSample 
 {
 	static constexpr const char *AID_SRC_NAME = "EV yaw";
 
-	float obs = getEulerYaw(ev_sample.quat);
+	// The observed yaw is taken in the Euler sequence of the filter's attitude: the innovation below and
+	// a yaw reset (resetQuatStateYaw) both use that sequence, and yaws in different sequences can differ
+	// by up to 180 deg near the switch between them.
+	float obs = getEulerYawInSequenceOf(_R_to_earth, Dcmf(ev_sample.quat));
 	float obs_var = math::max(ev_sample.orientation_var(2), _params.ekf2_eva_noise, sq(0.01f));
 
 	float innov = wrap_pi(getEulerYaw(_R_to_earth) - obs);

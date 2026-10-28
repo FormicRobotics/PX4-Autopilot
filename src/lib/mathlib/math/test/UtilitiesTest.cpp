@@ -84,3 +84,31 @@ TEST(shouldUse321RotationSequenceTest, morePitchThanRoll)
 	matrix::Dcmf R(euler);
 	EXPECT_FALSE(shouldUse321RotationSequence(R));
 }
+
+TEST(getEulerYawInSequenceOfTest, closeAttitudesAcrossTheSequenceSwitch)
+{
+	// Inverted and pitched, 1 deg apart in pitch, on either side of the switch between the sequences
+	const matrix::Dcmf R_a(matrix::Eulerf(math::radians(160.f), math::radians(-18.4f), math::radians(30.f)));
+	const matrix::Dcmf R_b(matrix::Eulerf(math::radians(160.f), math::radians(-19.4f), math::radians(30.f)));
+	ASSERT_TRUE(shouldUse321RotationSequence(R_a));
+	ASSERT_FALSE(shouldUse321RotationSequence(R_b));
+
+	// each in its own sequence: about 173 deg apart
+	EXPECT_GT(fabsf(matrix::wrap_pi(getEulerYaw(R_a) - getEulerYaw(R_b))), math::radians(170.f));
+
+	// both in the sequence of R_a (both 3-2-1): equal, R_b differs from R_a only in pitch
+	EXPECT_LT(fabsf(matrix::wrap_pi(getEulerYawInSequenceOf(R_a, R_a) - getEulerYawInSequenceOf(R_a, R_b))),
+		  math::radians(0.01f));
+
+	// both in the sequence of R_b (both 3-1-2): about 0.34 deg apart
+	EXPECT_LT(fabsf(matrix::wrap_pi(getEulerYawInSequenceOf(R_b, R_a) - getEulerYawInSequenceOf(R_b, R_b))),
+		  math::radians(1.f));
+}
+
+TEST(getEulerYawInSequenceOfTest, ownSequenceIsGetEulerYaw)
+{
+	const matrix::Dcmf R_a(matrix::Eulerf(math::radians(160.f), math::radians(-18.4f), math::radians(30.f)));
+	const matrix::Dcmf R_b(matrix::Eulerf(math::radians(10.f), math::radians(25.f), math::radians(-120.f)));
+	EXPECT_FLOAT_EQ(getEulerYawInSequenceOf(R_a, R_a), getEulerYaw(R_a));
+	EXPECT_FLOAT_EQ(getEulerYawInSequenceOf(R_b, R_b), getEulerYaw(R_b));
+}

@@ -162,6 +162,20 @@ inline T getEulerYaw(const matrix::Quaternion<T> &q)
 	return getEulerYaw(matrix::Dcm<T>(q));
 }
 
+// Returns the yaw of R in the Euler sequence (3-2-1 or 3-1-2) that R_ref would use.
+// Two yaws are only comparable in the same sequence: near the switch between the sequences,
+// getEulerYaw() of two close attitudes can differ by up to 180 deg.
+template<typename T = float>
+inline T getEulerYawInSequenceOf(const matrix::Dcm<T> &R_ref, const matrix::Dcm<T> &R)
+{
+	if (shouldUse321RotationSequence(R_ref)) {
+		return getEuler321Yaw(R);
+
+	} else {
+		return getEuler312Yaw(R);
+	}
+}
+
 template<typename T = float>
 inline matrix::Dcm<T> updateEuler321YawInRotMat(T yaw, const matrix::Dcm<T> &rot_in)
 {
