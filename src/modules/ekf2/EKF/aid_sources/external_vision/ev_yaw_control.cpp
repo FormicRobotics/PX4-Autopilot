@@ -48,7 +48,7 @@ void Ekf::controlEvYawFusion(const imuSample &imu_sample, const extVisionSample 
 	// a yaw reset (resetQuatStateYaw) both use that sequence, and yaws in different sequences can differ
 	// by up to 180 deg near the switch between them.
 	float obs = getEulerYawInSequenceOf(_R_to_earth, Dcmf(ev_sample.quat));
-	float obs_var = math::max(ev_sample.orientation_var(2), _params.ekf2_eva_noise, sq(0.01f));
+	float obs_var = math::max(ev_sample.orientation_var(2), sq(_params.ekf2_eva_noise), sq(0.01f));
 
 	float innov = wrap_pi(getEulerYaw(_R_to_earth) - obs);
 	float innov_var = 0.f;

@@ -355,3 +355,25 @@ TEST_F(EkfExternalVisionTest, positionFrameLocal)
 	EXPECT_NEAR(pos_earth_est(0), pos_earth(0), 0.1f);
 	EXPECT_NEAR(pos_earth_est(1), pos_earth(1), 0.1f);
 }
+
+TEST_F(EkfExternalVisionTest, evYawObservationVarianceIsTheSquareOfTheNoiseParameter)
+{
+	// GIVEN: a vision message that reports a far smaller yaw variance than the parameter
+	_ekf->getParamHandle()->ekf2_eva_noise = 0.05f;
+	_sensor_simulator.runSeconds(_tilt_align_time);
+	_sensor_simulator._vio.setAngularVariance(1e-6f);
+	_ekf_wrapper.enableExternalVisionHeadingFusion(); // EV_YAW
+	_sensor_simulator.startExternalVision();
+	_sensor_simulator.runSeconds(2);
+
+	// THEN: the yaw is fused with the variance of the parameter, which is a standard deviation in rad
+	EXPECT_TRUE(_ekf_wrapper.isIntendingExternalVisionHeadingFusion());
+	EXPECT_NEAR(_ekf->aid_src_ev_yaw().observation_variance, 0.05f * 0.05f, 1e-6f);
+
+	// WHEN: the vision message reports a larger variance than the parameter
+	_sensor_simulator._vio.setAngularVariance(0.04f);
+	_sensor_simulator.runSeconds(1);
+
+	// THEN: the variance of the message is used
+	EXPECT_NEAR(_ekf->aid_src_ev_yaw().observation_variance, 0.04f, 1e-6f);
+}
