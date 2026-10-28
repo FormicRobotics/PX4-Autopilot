@@ -4,6 +4,7 @@
 #include <px4_platform_common/log.h>
 #include <px4_platform_common/defines.h>
 #include <drivers/drv_hrt.h>
+#include <lib/sensor_calibration/Utilities.hpp>
 
 using namespace time_literals;
 using namespace math;
@@ -14,6 +15,8 @@ void FormicWatchdogEv::parameters_update(bool force)
 		parameter_update_s param_update{};
 		_parameter_update_sub.copy(&param_update);
 		updateParams();
+		_body_from_sensor = formic_watchdog_ev::body_from_sensor(calibration::GetSensorLevelAdjustment(),
+				    calibration::GetBoardRotationMatrix());
 	}
 
 	_ev_hpos_enabled = (_param_ekf2_ev_ctrl.get() & (1 << 0)) != 0;
@@ -114,6 +117,13 @@ bool FormicWatchdogEv::copy_odometry_msg(vehicle_odometry_s &odometry, const hrt
 		++_n_poll_time;
 	}
 
+	// The sender gives the orientation of the raw sensor frame (the frame of sensor_gyro and
+	// sensor_accel). EKF2 works in the body frame, after the level trim and the board rotation.
+	if (_param_formic_wdev_brot.get() != 0
+	    && formic_watchdog_ev::sensor_to_body_orientation(odometry.q, _body_from_sensor)) {
+		++_n_body_rotated;
+	}
+
 	// Always re-evaluate EKF/EV convergence this cycle, but only bump reset_counter
 	// at most once every 500 ms so we don't force an EKF reset-to-vision on every sample.
 
@@ -145,6 +155,9 @@ int FormicWatchdogEv::print_status()
 		 (unsigned long)_n_sender_age, (unsigned long)_n_poll_time, (unsigned long)_n_stale);
 	PX4_INFO("age of the last pose when sent: %.1f ms (FORMIC_WDEV_AMAX %ld ms)",
 		 (double)_last_age_us * 1e-3, (long)_param_formic_wdev_amax.get());
+	PX4_INFO("body frame: %s (FORMIC_WDEV_BROT), %lu poses turned, rotation %.2f deg",
+		 _param_formic_wdev_brot.get() != 0 ? "on" : "off", (unsigned long)_n_body_rotated,
+		 (double)matrix::AxisAnglef(_body_from_sensor).angle() * 180.0 / M_PI);
 	return PX4_OK;
 }
 

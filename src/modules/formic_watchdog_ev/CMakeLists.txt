@@ -5,7 +5,9 @@ px4_add_module(
 		formic_watchdog_ev.cpp
 	DEPENDS
 		px4_work_queue
+		sensor_calibration
 )
 
 px4_add_unit_gtest(SRC FormicSampleTimeTest.cpp)
+px4_add_unit_gtest(SRC FormicBoardFrameTest.cpp)
 

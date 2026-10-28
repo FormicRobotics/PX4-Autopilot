@@ -19,6 +19,7 @@
 // Drivers
 #include <drivers/drv_hrt.h>
 
+#include "board_frame.hpp"
 #include "sample_time.hpp"
 
 
@@ -102,6 +103,10 @@ private:
 	uint32_t _n_stale{0};       // poses dropped: older than FORMIC_WDEV_AMAX
 	int64_t _last_age_us{0};    // age of the last pose when its sender published it
 
+	// --- Body frame (print_status) ---
+	matrix::Dcmf _body_from_sensor{}; // rotation PX4 applies to the data of an internal IMU: level trim after board rotation
+	uint32_t _n_body_rotated{0};      // poses whose orientation was turned from the sensor frame into the body frame
+
 	bool _pos_requested{false}; // latched formic_pos_req.pos_req: true while a position mode is requested
 	int reset_counter = 0;
 
@@ -114,6 +119,7 @@ private:
 		(ParamFloat<px4::params::FORMIC_WDEV_DPOS>) _param_formic_wdev_dpos, // maximum allowed position deviation
 		(ParamInt<px4::params::FORMIC_WDEV_AMAX>) _param_formic_wdev_amax, // largest age of a pose that is fused, ms
 		(ParamInt<px4::params::FORMIC_WDEV_AVLD>) _param_formic_wdev_avld, // largest age taken as an age, ms
+		(ParamInt<px4::params::FORMIC_WDEV_BROT>) _param_formic_wdev_brot, // 1: turn the pose orientation into the body frame
 		(ParamInt<px4::params::EKF2_NOAID_TOUT>) _param_ekf2_noaid_tout // EKF2 no-aid timeout
 	)
 };

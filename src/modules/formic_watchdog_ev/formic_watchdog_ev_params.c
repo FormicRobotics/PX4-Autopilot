@@ -81,3 +81,21 @@ PARAM_DEFINE_INT32(FORMIC_WDEV_AMAX, 200);
  * @category Standard
  */
 PARAM_DEFINE_INT32(FORMIC_WDEV_AVLD, 5000);
+
+/**
+ * Turn the pose orientation into the body frame.
+ *
+ * The sender gives the orientation of the raw sensor frame, the frame of sensor_gyro and
+ * sensor_accel in which the IMU calibration is made. EKF2 works in the body frame: the sensor
+ * frame turned by the level trim SENS_BOARD_X/Y/Z_OFF after the board rotation SENS_BOARD_ROT.
+ * 1 turns the orientation of every pose by that rotation. 0 sends it as it is: use 0 when the
+ * sender already gives the body frame, for example after an IMU calibration made on vehicle_imu.
+ *
+ * @min 0
+ * @max 1
+ * @group Formic Watchdog EV
+ * @category Standard
+ * @value 0 Orientation as sent
+ * @value 1 Orientation in the body frame
+ */
+PARAM_DEFINE_INT32(FORMIC_WDEV_BROT, 1);
