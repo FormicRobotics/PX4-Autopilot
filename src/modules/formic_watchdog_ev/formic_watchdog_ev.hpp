@@ -19,6 +19,8 @@
 // Drivers
 #include <drivers/drv_hrt.h>
 
+#include "sample_time.hpp"
+
 
 
 enum class VIOStatus {
@@ -54,11 +56,14 @@ public:
 
 	bool init();
 	void Run() override;
+	int print_status() override; // sample time counters and the last age
 
 private:
 	// --- Methods ---
 	void parameters_update(bool force = false);
-	void copy_odometry_msg(vehicle_odometry_s &odometry);
+	/// Copies one formic_odom pose to vehicle_visual_odometry with its sample time on the PX4 clock.
+	/// Returns false when the pose is stale (older than FORMIC_WDEV_AMAX) and is dropped.
+	bool copy_odometry_msg(vehicle_odometry_s &odometry, hrt_abstime formic_timestamp);
 	bool check_EV_aid_src_heading(float vio_yaw, float estimator_yaw); // returns true if EV yaw aid data was fused this cycle; sets _heading_alligned_with_ev
 	bool resetcounter_req(vehicle_odometry_s &odometry);
 	void no_EvData(); // need to get the EV data dropout status
@@ -91,6 +96,12 @@ private:
 	bool _ekfs_conv {false};
 	bool _data_arrived{false}; // true if new EV data has arrived this cycle
 
+	// --- Sample time (print_status) ---
+	uint32_t _n_sender_age{0};  // poses stamped with the publish time minus their age
+	uint32_t _n_poll_time{0};   // poses stamped with the poll time (the sender's stamps are not an age)
+	uint32_t _n_stale{0};       // poses dropped: older than FORMIC_WDEV_AMAX
+	int64_t _last_age_us{0};    // age of the last pose when its sender published it
+
 	bool _pos_requested{false}; // latched formic_pos_req.pos_req: true while a position mode is requested
 	int reset_counter = 0;
 
@@ -101,6 +112,8 @@ private:
 		(ParamInt<px4::params::EKF2_EV_CTRL>) _param_ekf2_ev_ctrl, // EKF2 EV control bitmask
 		(ParamFloat<px4::params::FORMIC_WDEV_DYAW>) _param_formic_wdev_dyaw, // maximum allowed yaw deviation
 		(ParamFloat<px4::params::FORMIC_WDEV_DPOS>) _param_formic_wdev_dpos, // maximum allowed position deviation
+		(ParamInt<px4::params::FORMIC_WDEV_AMAX>) _param_formic_wdev_amax, // largest age of a pose that is fused, ms
+		(ParamInt<px4::params::FORMIC_WDEV_AVLD>) _param_formic_wdev_avld, // largest age taken as an age, ms
 		(ParamInt<px4::params::EKF2_NOAID_TOUT>) _param_ekf2_noaid_tout // EKF2 no-aid timeout
 	)
 };

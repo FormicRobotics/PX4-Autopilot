@@ -70,10 +70,14 @@ void FormicWatchdogEv::Run()
 	formic_vehicle_odometry_s formic_odometry{};
 
 	if (_odometry_sub_formic.update(&formic_odometry) && (formic_odometry.timestamp != _last_ev_msg_timestamp)) {
-		_last_ev_timestamp = hrt_absolute_time();
 		_last_ev_msg_timestamp = formic_odometry.timestamp;
 		vehicle_odometry_s &odometry = formic_odometry.odometry;
-		copy_odometry_msg(odometry);
+
+		// A stale pose does not count as EV data, so a stream that is only stale times out.
+		if (copy_odometry_msg(odometry, formic_odometry.timestamp)) {
+			_last_ev_timestamp = hrt_absolute_time();
+		}
+
 		parse_status(formic_odometry.status);
 
 	}
@@ -87,9 +91,29 @@ void FormicWatchdogEv::Run()
 // Data handling helpers
 // -----------------------------------------------------------------------------
 
-void FormicWatchdogEv::copy_odometry_msg(vehicle_odometry_s &odometry)
+bool FormicWatchdogEv::copy_odometry_msg(vehicle_odometry_s &odometry, const hrt_abstime formic_timestamp)
 
 {
+	// The sample time reads odometry.timestamp, which is overwritten below. formic_timestamp is
+	// the top-level stamp of formic_odom, which the DDS client has mapped to the PX4 clock.
+	const auto sample = formic_watchdog_ev::resolve_sample_time(
+				    odometry.timestamp, odometry.timestamp_sample, formic_timestamp, hrt_absolute_time(),
+				    static_cast<int64_t>(_param_formic_wdev_amax.get()) * 1000,
+				    static_cast<int64_t>(_param_formic_wdev_avld.get()) * 1000);
+	_last_age_us = sample.age_us;
+
+	if (sample.source == formic_watchdog_ev::StampSource::STALE) {
+		++_n_stale;
+		return false; // a stale pose must not drive the reset logic or reach EKF2
+	}
+
+	if (sample.source == formic_watchdog_ev::StampSource::SENDER_AGE) {
+		++_n_sender_age;
+
+	} else {
+		++_n_poll_time;
+	}
+
 	// Always re-evaluate EKF/EV convergence this cycle, but only bump reset_counter
 	// at most once every 500 ms so we don't force an EKF reset-to-vision on every sample.
 
@@ -99,8 +123,8 @@ void FormicWatchdogEv::copy_odometry_msg(vehicle_odometry_s &odometry)
 	}
 
 	odometry.reset_counter = reset_counter;
-	odometry.timestamp_sample = hrt_absolute_time(); // not ok - vlad 
-	odometry.timestamp = hrt_absolute_time(); // not ok - vlad 
+	odometry.timestamp_sample = sample.time_us; // the poll time unless the sender's age is usable
+	odometry.timestamp = hrt_absolute_time();
 
 
 	if (_pos_requested) {
@@ -112,6 +136,16 @@ void FormicWatchdogEv::copy_odometry_msg(vehicle_odometry_s &odometry)
 		_ekfs_conv = false;
 	}
 
+	return true;
+}
+
+int FormicWatchdogEv::print_status()
+{
+	PX4_INFO("sample time: %lu from the age of the sender, %lu from the poll time, %lu stale poses dropped",
+		 (unsigned long)_n_sender_age, (unsigned long)_n_poll_time, (unsigned long)_n_stale);
+	PX4_INFO("age of the last pose when sent: %.1f ms (FORMIC_WDEV_AMAX %ld ms)",
+		 (double)_last_age_us * 1e-3, (long)_param_formic_wdev_amax.get());
+	return PX4_OK;
 }
 
 

@@ -48,3 +48,36 @@ PARAM_DEFINE_FLOAT(FORMIC_WDEV_DYAW, 0.5f);
  * @category Standard
  */
 PARAM_DEFINE_FLOAT(FORMIC_WDEV_DPOS, 1.0f);
+
+/**
+ * Largest age of a pose that is fused.
+ *
+ * The age of a pose is the time from the sample of the pose to the moment its sender
+ * published it, the difference of the two stamps in formic_odom. The sample time that
+ * EKF2 gets is the publish time minus the age, on the PX4 clock. A pose older than this
+ * is dropped, counted ("formic_watchdog_ev status") and does not count as EV data.
+ * 0 turns the sample time off: every pose gets the time it was polled, as before.
+ * Keep it at most EKF2_DELAY_MAX. EKF2_EV_DELAY is then the delay that is left over, near 0.
+ *
+ * @min 0
+ * @max 1000
+ * @unit ms
+ * @group Formic Watchdog EV
+ * @category Standard
+ */
+PARAM_DEFINE_INT32(FORMIC_WDEV_AMAX, 200);
+
+/**
+ * Largest age that is taken as an age.
+ *
+ * A sender that does not stamp the sample on the same clock as the publish time, like
+ * the control repo's openvins2px4 (VIO clock), gives a negative or huge "age". An age
+ * above this, or below 0, is not an age: the pose gets the time it was polled.
+ *
+ * @min 0
+ * @max 60000
+ * @unit ms
+ * @group Formic Watchdog EV
+ * @category Standard
+ */
+PARAM_DEFINE_INT32(FORMIC_WDEV_AVLD, 5000);
