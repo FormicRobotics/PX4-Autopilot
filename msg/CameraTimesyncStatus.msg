@@ -30,4 +30,5 @@ uint32 match_window             # half-width of the accept window used for match
 uint32 matched_count            # frames matched to a strobe since start
 uint32 rejected_count           # matched frames whose offset was too far from the estimate
 uint32 unmatched_count          # frames with no strobe inside the window
-uint32 counter_mismatch_count   # times strobe_seq - frame_counter changed while locked (dropped frame or missed strobe)
+uint32 counter_mismatch_count   # matched frames whose frame_counter step disagrees with the strobe periods elapsed since the previous match: a frame lost without a stamp gap (the companion skips its counter over driver drops). Not counted across a companion restart.
+uint32 strobe_seq_error_count   # matched strobes whose camera_trigger.seq step disagrees with the strobe periods elapsed: an edge counted with no strobe behind it (bounce on the strobe line) or a missed edge
