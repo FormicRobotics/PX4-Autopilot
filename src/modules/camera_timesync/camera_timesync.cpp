@@ -211,6 +211,16 @@ void CameraTimesync::update_strobe_period(hrt_abstime interval)
 		return;
 	}
 
+	// Bounce on the strobe line shows as extra edges a fraction of a period after the real one.
+	// They are not intervals of the camera; only a long run of them means the rate really changed.
+	if (_strobe_period_us > 0 && interval < _strobe_period_us / 2) {
+		if (++_short_intervals < 20) {
+			return;
+		}
+	}
+
+	_short_intervals = 0;
+
 	constexpr unsigned n = sizeof(_strobe_intervals) / sizeof(_strobe_intervals[0]);
 	_strobe_intervals[_strobe_interval_count % n] = static_cast<uint32_t>(interval);
 	_strobe_interval_count++;
@@ -318,6 +328,7 @@ void CameraTimesync::process_frame(const camera_frame_stamp_s &frame)
 
 		if (_lock_sample_count < MAX_LOCK_SAMPLES) {
 			_lock_samples[_lock_sample_count++] = observed;
+			_lock_last_strobe_time = strobe.timestamp;
 		}
 
 		const unsigned needed = static_cast<unsigned>(math::constrain(_param_lock_n.get(), (int32_t)2, (int32_t)MAX_LOCK_SAMPLES));
@@ -329,9 +340,24 @@ void CameraTimesync::process_frame(const camera_frame_stamp_s &frame)
 	} else {
 		check_counters(frame, strobe);
 
-		const int64_t deviation = llabs(observed - static_cast<int64_t>(_estimated_offset));
+		// Offset and drift (alpha-beta filter) at the strobe time of this sample.
+		double dt_s = 0.0;
 
-		if (deviation > _param_max_dev_us.get()) {
+		if (strobe.timestamp > _estimate_time) {
+			dt_s = static_cast<double>(strobe.timestamp - _estimate_time) * 1e-6;
+			_estimated_offset += _drift_us_per_s * dt_s;
+			_estimate_time = strobe.timestamp;
+		}
+
+		const double residual = static_cast<double>(observed) - _estimated_offset;
+
+		// A sample far outside the recent residuals is a spurious edge the frame matched
+		// (bounce on the strobe line). The floor lets a small step of the companion clock be
+		// absorbed by the filter; CAMTS_MAX_DEV stays the ceiling that drops the lock.
+		const double gate = math::min(static_cast<double>(_param_max_dev_us.get()),
+					      math::max(300.0, 8.0 * _mean_abs_residual));
+
+		if (fabs(residual) > gate) {
 			_status.rejected_count++;
 			_consecutive_rejects++;
 
@@ -344,8 +370,15 @@ void CameraTimesync::process_frame(const camera_frame_stamp_s &frame)
 		}
 
 		_consecutive_rejects = 0;
+		_mean_abs_residual += 0.05 * (fabs(residual) - _mean_abs_residual);
+
 		const double alpha = static_cast<double>(math::constrain(_param_alpha.get(), 0.01f, 1.f));
-		_estimated_offset += alpha * (static_cast<double>(observed) - _estimated_offset);
+		const double beta = alpha * alpha / (2.0 - alpha);
+		_estimated_offset += alpha * residual;
+
+		if (dt_s > 0.0) {
+			_drift_us_per_s = math::constrain(_drift_us_per_s + beta * residual / dt_s, -2000.0, 2000.0);
+		}
 	}
 
 	_status.matched_count++;
@@ -413,6 +446,9 @@ void CameraTimesync::lock_from_samples()
 	}
 
 	_estimated_offset = static_cast<double>(sorted[_lock_sample_count / 2]);
+	_estimate_time = _lock_last_strobe_time;
+	_drift_us_per_s = 0.0;
+	_mean_abs_residual = 100.0;
 	_locked = true;
 	_state = camera_timesync_status_s::STATE_LOCKED;
 	_consecutive_rejects = 0;
@@ -436,12 +472,23 @@ void CameraTimesync::unlock(const char *reason)
 	_last_match_valid = false;
 }
 
+double CameraTimesync::estimate_at(hrt_abstime t) const
+{
+	if (!_locked || t <= _estimate_time) {
+		return _estimated_offset;
+	}
+
+	return _estimated_offset + _drift_us_per_s * static_cast<double>(t - _estimate_time) * 1e-6;
+}
+
 void CameraTimesync::publish_status()
 {
 	_status.timestamp = hrt_absolute_time();
 	_status.state = _state;
 	_status.apply = _locked && (_param_apply.get() != 0);
-	_status.estimated_offset = static_cast<int64_t>(_estimated_offset);
+	// The estimate is carried from the last strobe sample (~a frame readout plus the link ago) to now.
+	_status.estimated_offset = static_cast<int64_t>(estimate_at(_status.timestamp));
+	_status.drift_ppm = static_cast<float>(_drift_us_per_s);
 	_status.dds_offset = _dds_offset;
 	_status.strobe_period = _strobe_period_us;
 	_status_pub.publish(_status);
@@ -454,9 +501,9 @@ int CameraTimesync::print_status()
 	const char *state = (_state < 6) ? state_names[_state] : "?";
 
 	PX4_INFO("state: %s, apply: %s", state, (_locked && _param_apply.get()) ? "yes" : "no");
-	PX4_INFO("offset: camera %lld us, dds %lld us, camera - dds %lld us",
+	PX4_INFO("offset: camera %lld us, dds %lld us, camera - dds %lld us, drift %.1f ppm",
 		 (long long)_estimated_offset, (long long)_dds_offset,
-		 (long long)(static_cast<int64_t>(_estimated_offset) - _dds_offset));
+		 (long long)(static_cast<int64_t>(_estimated_offset) - _dds_offset), _drift_us_per_s);
 	PX4_INFO("last: observed %lld us, match error %lld us, window %lu us, strobe period %lu us",
 		 (long long)_status.observed_offset, (long long)_status.match_error,
 		 (unsigned long)_status.match_window, (unsigned long)_strobe_period_us);
