@@ -118,7 +118,7 @@ private:
 	uint32_t _strobe_period_us{0};
 	uint32_t _strobe_intervals[9] {};
 	unsigned _strobe_interval_count{0};
-	unsigned _short_intervals{0};
+	unsigned _odd_intervals{0};
 
 	// Estimate: offset and its rate, valid at _estimate_time (the strobe time of the last sample).
 	uint8_t _state{camera_timesync_status_s::STATE_NO_TRIGGERS};
