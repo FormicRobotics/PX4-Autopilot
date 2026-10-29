@@ -105,6 +105,7 @@ private:
 	uint32_t effective_window() const;
 	void update_strobe_period(hrt_abstime interval);
 	void check_counters(const camera_frame_stamp_s &frame, const Strobe &strobe);
+	double estimate_at(hrt_abstime t) const;
 	void lock_from_samples();
 	void unlock(const char *reason);
 	void publish_status();
@@ -117,13 +118,18 @@ private:
 	uint32_t _strobe_period_us{0};
 	uint32_t _strobe_intervals[9] {};
 	unsigned _strobe_interval_count{0};
+	unsigned _short_intervals{0};
 
-	// Estimate.
+	// Estimate: offset and its rate, valid at _estimate_time (the strobe time of the last sample).
 	uint8_t _state{camera_timesync_status_s::STATE_NO_TRIGGERS};
 	bool _locked{false};
 	double _estimated_offset{0.0};
+	double _drift_us_per_s{0.0};
+	hrt_abstime _estimate_time{0};
+	double _mean_abs_residual{100.0};
 	int64_t _lock_samples[MAX_LOCK_SAMPLES] {};
 	unsigned _lock_sample_count{0};
+	hrt_abstime _lock_last_strobe_time{0};
 	unsigned _consecutive_rejects{0};
 	hrt_abstime _last_accept_time{0};
 	hrt_abstime _last_frame_time{0};
