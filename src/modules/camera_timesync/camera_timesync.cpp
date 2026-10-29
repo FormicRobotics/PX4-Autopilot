@@ -240,10 +240,13 @@ uint32_t CameraTimesync::effective_window() const
 	return 5000;
 }
 
-bool CameraTimesync::coarse_offset(int64_t &offset_us) const
+bool CameraTimesync::coarse_offset(int64_t frame_us, int64_t &offset_us) const
 {
 	if (_locked) {
-		offset_us = static_cast<int64_t>(_estimated_offset);
+		// Carry the estimate to where this frame's strobe should be, so a fast-slewing
+		// companion clock (ms per second on the bench) does not show up as match error.
+		const int64_t expected_hrt = frame_us + static_cast<int64_t>(_estimated_offset);
+		offset_us = static_cast<int64_t>(estimate_at(expected_hrt > 0 ? static_cast<hrt_abstime>(expected_hrt) : 0));
 		return true;
 	}
 
@@ -265,14 +268,14 @@ void CameraTimesync::process_frame(const camera_frame_stamp_s &frame)
 		return;
 	}
 
+	const int64_t frame_us = static_cast<int64_t>(frame.frame_realtime_ns / 1000ULL);
 	int64_t hint = 0;
 
-	if (!coarse_offset(hint)) {
+	if (!coarse_offset(frame_us, hint)) {
 		_state = camera_timesync_status_s::STATE_WAITING_DDS;
 		return;
 	}
 
-	const int64_t frame_us = static_cast<int64_t>(frame.frame_realtime_ns / 1000ULL);
 	const int64_t predicted = frame_us + hint;
 
 	// Nearest unused strobe to the predicted hrt time of the frame.

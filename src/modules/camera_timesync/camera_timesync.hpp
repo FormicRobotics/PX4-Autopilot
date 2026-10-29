@@ -101,7 +101,7 @@ private:
 	void parameters_update(bool force = false);
 	void drain_strobes();
 	void process_frame(const camera_frame_stamp_s &frame);
-	bool coarse_offset(int64_t &offset_us) const;
+	bool coarse_offset(int64_t frame_us, int64_t &offset_us) const;
 	uint32_t effective_window() const;
 	void update_strobe_period(hrt_abstime interval);
 	void check_counters(const camera_frame_stamp_s &frame, const Strobe &strobe);

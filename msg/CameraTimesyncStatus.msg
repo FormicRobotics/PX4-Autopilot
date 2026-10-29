@@ -19,7 +19,7 @@ uint32 driver_sequence          # V4L2 sequence of the last matched frame
 uint32 strobe_seq               # camera_trigger.seq matched to it
 uint64 frame_realtime_ns        # companion stamp of the matched frame (ns, companion CLOCK_REALTIME)
 uint64 strobe_timestamp         # hrt time of the matched strobe edge (microseconds, not converted)
-int64 observed_offset           # strobe_timestamp - frame_realtime (us): one raw measurement
+int64 observed_offset           # strobe_timestamp - frame_realtime (us): one raw measurement, valid at strobe_timestamp (compare with match_error, not with estimated_offset, which is carried to `timestamp`)
 int64 estimated_offset          # filtered offset (us) at `timestamp`, the value the DDS client applies
 float32 drift_ppm               # rate of estimated_offset (us per s): how fast the companion clock runs against the FC clock
 int64 dds_offset                # estimated_offset of the DDS round-trip timesync (us), for comparison
