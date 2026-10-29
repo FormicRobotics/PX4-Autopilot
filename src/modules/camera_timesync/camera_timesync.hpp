@@ -104,6 +104,7 @@ private:
 	bool coarse_offset(int64_t &offset_us) const;
 	uint32_t effective_window() const;
 	void update_strobe_period(hrt_abstime interval);
+	void check_counters(const camera_frame_stamp_s &frame, const Strobe &strobe);
 	void lock_from_samples();
 	void unlock(const char *reason);
 	void publish_status();
@@ -129,8 +130,11 @@ private:
 	hrt_abstime _last_status_time{0};
 	int64_t _dds_offset{0};
 	bool _dds_offset_valid{false};
-	int64_t _seq_minus_counter{0};
-	bool _seq_minus_counter_valid{false};
+	// Last matched pair, for the counter checks.
+	bool _last_match_valid{false};
+	hrt_abstime _last_match_strobe_time{0};
+	uint32_t _last_match_strobe_seq{0};
+	uint32_t _last_match_frame_counter{0};
 
 	// Last match, for the status message.
 	camera_timesync_status_s _status{};

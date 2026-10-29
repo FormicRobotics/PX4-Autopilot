@@ -327,16 +327,7 @@ void CameraTimesync::process_frame(const camera_frame_stamp_s &frame)
 		}
 
 	} else {
-		// Counter consistency: the difference between the strobe counter and the companion
-		// frame counter stays constant unless a frame or a strobe was lost.
-		const int64_t d = static_cast<int64_t>(strobe.seq) - static_cast<int64_t>(frame.frame_counter);
-
-		if (_seq_minus_counter_valid && d != _seq_minus_counter) {
-			_status.counter_mismatch_count++;
-		}
-
-		_seq_minus_counter = d;
-		_seq_minus_counter_valid = true;
+		check_counters(frame, strobe);
 
 		const int64_t deviation = llabs(observed - static_cast<int64_t>(_estimated_offset));
 
@@ -360,6 +351,41 @@ void CameraTimesync::process_frame(const camera_frame_stamp_s &frame)
 	_status.matched_count++;
 	_last_accept_time = now;
 	publish_status();
+}
+
+// Both counters are judged against the clock: the strobe period says how many frames passed
+// between two matched strobes. The companion skips its counter over frames its driver dropped,
+// so a frame step off that count is a frame lost without a stamp gap. A strobe seq step off it
+// is an edge camera_capture counted with no strobe behind it (bounce on the line) or a missed
+// edge; neither disturbs the offset, the match goes by time, but both are worth knowing.
+void CameraTimesync::check_counters(const camera_frame_stamp_s &frame, const Strobe &strobe)
+{
+	if (_last_match_valid && frame.frame_counter < _last_match_frame_counter) {
+		PX4_INFO("companion frame counter restarted (%lu -> %lu)",
+			 (unsigned long)_last_match_frame_counter, (unsigned long)frame.frame_counter);
+		_last_match_valid = false;
+	}
+
+	if (_last_match_valid && _strobe_period_us > 0 && strobe.timestamp > _last_match_strobe_time) {
+		const int64_t elapsed = static_cast<int64_t>(strobe.timestamp - _last_match_strobe_time);
+		const int64_t periods = (elapsed + _strobe_period_us / 2) / _strobe_period_us;
+		const int64_t frame_step = static_cast<int64_t>(frame.frame_counter)
+					   - static_cast<int64_t>(_last_match_frame_counter);
+		const int64_t seq_step = static_cast<int64_t>(strobe.seq) - static_cast<int64_t>(_last_match_strobe_seq);
+
+		if (frame_step != periods) {
+			_status.counter_mismatch_count++;
+		}
+
+		if (seq_step != periods) {
+			_status.strobe_seq_error_count++;
+		}
+	}
+
+	_last_match_strobe_time = strobe.timestamp;
+	_last_match_strobe_seq = strobe.seq;
+	_last_match_frame_counter = frame.frame_counter;
+	_last_match_valid = true;
 }
 
 void CameraTimesync::lock_from_samples()
@@ -390,7 +416,7 @@ void CameraTimesync::lock_from_samples()
 	_locked = true;
 	_state = camera_timesync_status_s::STATE_LOCKED;
 	_consecutive_rejects = 0;
-	_seq_minus_counter_valid = false;
+	_last_match_valid = false;
 	_lock_sample_count = 0;
 
 	PX4_INFO("locked: offset %lld us (dds %lld us, diff %lld us) from %u samples",
@@ -407,7 +433,7 @@ void CameraTimesync::unlock(const char *reason)
 	_locked = false;
 	_lock_sample_count = 0;
 	_consecutive_rejects = 0;
-	_seq_minus_counter_valid = false;
+	_last_match_valid = false;
 }
 
 void CameraTimesync::publish_status()
@@ -436,9 +462,10 @@ int CameraTimesync::print_status()
 		 (unsigned long)_status.match_window, (unsigned long)_strobe_period_us);
 	PX4_INFO("latency: strobe->receive %lu us, transport %lu us",
 		 (unsigned long)_status.strobe_to_receive, (unsigned long)_status.transport_latency);
-	PX4_INFO("counts: matched %lu, rejected %lu, unmatched %lu, counter mismatch %lu, strobes %u",
+	PX4_INFO("counts: matched %lu, rejected %lu, unmatched %lu, counter mismatch %lu, strobe seq errors %lu, strobes %u",
 		 (unsigned long)_status.matched_count, (unsigned long)_status.rejected_count,
-		 (unsigned long)_status.unmatched_count, (unsigned long)_status.counter_mismatch_count, _strobe_count);
+		 (unsigned long)_status.unmatched_count, (unsigned long)_status.counter_mismatch_count,
+		 (unsigned long)_status.strobe_seq_error_count, _strobe_count);
 	return 0;
 }
 
