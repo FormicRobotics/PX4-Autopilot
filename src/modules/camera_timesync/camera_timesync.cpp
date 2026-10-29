@@ -211,15 +211,16 @@ void CameraTimesync::update_strobe_period(hrt_abstime interval)
 		return;
 	}
 
-	// Bounce on the strobe line shows as extra edges a fraction of a period after the real one.
-	// They are not intervals of the camera; only a long run of them means the rate really changed.
-	if (_strobe_period_us > 0 && interval < _strobe_period_us / 2) {
-		if (++_short_intervals < 20) {
+	// Bounce on the strobe line shows as extra edges a fraction of a period after the real one,
+	// and the sensor stalls for half a second when its frame rate is set after stream start.
+	// Neither is the camera's period; only a run of 20 means the rate really changed.
+	if (_strobe_period_us > 0 && (interval < _strobe_period_us / 2 || interval > 2 * _strobe_period_us)) {
+		if (++_odd_intervals < 20) {
 			return;
 		}
 	}
 
-	_short_intervals = 0;
+	_odd_intervals = 0;
 
 	constexpr unsigned n = sizeof(_strobe_intervals) / sizeof(_strobe_intervals[0]);
 	_strobe_intervals[_strobe_interval_count % n] = static_cast<uint32_t>(interval);
