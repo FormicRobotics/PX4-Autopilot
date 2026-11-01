@@ -1095,8 +1095,9 @@ PARAM_DEFINE_INT32(FORMIC_VIO_MF, 5);
  * formic_odom to EKF2.
  *
  * 1: Position mode flies on the VIO through formic_vio_est (estimator instance 1).
- * EKF2 (instance 0) never sees vision and flies Altitude mode. Needs
- * SENS_IMU_MODE 0 and EKF2_MULTI_IMU 1; arming is refused otherwise.
+ * EKF2 (instance 0) never sees vision and flies Altitude mode. The start script
+ * sets SENS_IMU_MODE 0 for the boot; EKF2_MULTI_IMU and EKF2_MULTI_MAG must be
+ * 0 or 1 (their defaults). Arming is refused otherwise.
  *
  * @group Commander
  * @value 0 EKF2 with vision

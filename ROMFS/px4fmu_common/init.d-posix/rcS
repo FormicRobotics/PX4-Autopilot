@@ -239,6 +239,14 @@ then
 	exit 1
 fi
 
+# FORMIC_EST_MODE 1 runs EKF2 behind the selector, which needs SENS_IMU_MODE 0. It is made this
+# boot's default rather than saved, so FORMIC_EST_MODE 0 gets today's SENS_IMU_MODE back.
+if param compare FORMIC_EST_MODE 1
+then
+	param reset SENS_IMU_MODE
+	param set-default SENS_IMU_MODE 0
+fi
+
 dataman start
 
 # only start the simulator if not in replay mode, as both control the lockstep time
