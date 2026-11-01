@@ -635,9 +635,16 @@ else
 	formic_logger_flag start
 
 	#
-	# Start the formic watchdog EV module.
+	# Start the formic estimator modules for the design FORMIC_EST_MODE picks.
+	# 0: formic_watchdog_ev forwards the VIO to EKF2.
+	# 1: formic_vio_est carries the VIO as estimator instance 1; EKF2 never sees vision.
 	#
-	formic_watchdog_ev start
+	if param compare FORMIC_EST_MODE 1
+	then
+		formic_vio_est start
+	else
+		formic_watchdog_ev start
+	fi
 
 	#
 	# Start the flip after crash module.

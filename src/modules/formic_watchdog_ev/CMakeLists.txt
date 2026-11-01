@@ -8,6 +8,3 @@ px4_add_module(
 		sensor_calibration
 )
 
-px4_add_unit_gtest(SRC FormicSampleTimeTest.cpp)
-px4_add_unit_gtest(SRC FormicBoardFrameTest.cpp)
-

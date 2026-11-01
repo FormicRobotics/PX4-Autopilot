@@ -19,8 +19,8 @@
 // Drivers
 #include <drivers/drv_hrt.h>
 
-#include "board_frame.hpp"
-#include "sample_time.hpp"
+#include <lib/formic_frames/board_frame.hpp>
+#include <lib/formic_frames/sample_time.hpp>
 
 
 

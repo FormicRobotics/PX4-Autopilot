@@ -2,8 +2,8 @@
 
 #include "sample_time.hpp"
 
-using formic_watchdog_ev::resolve_sample_time;
-using formic_watchdog_ev::StampSource;
+using formic_frames::resolve_sample_time;
+using formic_frames::StampSource;
 
 namespace
 {

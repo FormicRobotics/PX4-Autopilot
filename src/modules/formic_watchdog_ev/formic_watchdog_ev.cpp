@@ -15,7 +15,7 @@ void FormicWatchdogEv::parameters_update(bool force)
 		parameter_update_s param_update{};
 		_parameter_update_sub.copy(&param_update);
 		updateParams();
-		_body_from_sensor = formic_watchdog_ev::body_from_sensor(calibration::GetSensorLevelAdjustment(),
+		_body_from_sensor = formic_frames::body_from_sensor(calibration::GetSensorLevelAdjustment(),
 				    calibration::GetBoardRotationMatrix());
 	}
 
@@ -99,18 +99,18 @@ bool FormicWatchdogEv::copy_odometry_msg(vehicle_odometry_s &odometry, const hrt
 {
 	// The sample time reads odometry.timestamp, which is overwritten below. formic_timestamp is
 	// the top-level stamp of formic_odom, which the DDS client has mapped to the PX4 clock.
-	const auto sample = formic_watchdog_ev::resolve_sample_time(
+	const auto sample = formic_frames::resolve_sample_time(
 				    odometry.timestamp, odometry.timestamp_sample, formic_timestamp, hrt_absolute_time(),
 				    static_cast<int64_t>(_param_formic_wdev_amax.get()) * 1000,
 				    static_cast<int64_t>(_param_formic_wdev_avld.get()) * 1000);
 	_last_age_us = sample.age_us;
 
-	if (sample.source == formic_watchdog_ev::StampSource::STALE) {
+	if (sample.source == formic_frames::StampSource::STALE) {
 		++_n_stale;
 		return false; // a stale pose must not drive the reset logic or reach EKF2
 	}
 
-	if (sample.source == formic_watchdog_ev::StampSource::SENDER_AGE) {
+	if (sample.source == formic_frames::StampSource::SENDER_AGE) {
 		++_n_sender_age;
 
 	} else {
@@ -120,7 +120,7 @@ bool FormicWatchdogEv::copy_odometry_msg(vehicle_odometry_s &odometry, const hrt
 	// The sender gives the orientation of the raw sensor frame (the frame of sensor_gyro and
 	// sensor_accel). EKF2 works in the body frame, after the level trim and the board rotation.
 	if (_param_formic_wdev_brot.get() != 0
-	    && formic_watchdog_ev::sensor_to_body_orientation(odometry.q, _body_from_sensor)) {
+	    && formic_frames::sensor_to_body_orientation(odometry.q, _body_from_sensor)) {
 		++_n_body_rotated;
 	}
 
@@ -304,6 +304,15 @@ void FormicWatchdogEv::parse_status(const char status[16])
 
 int FormicWatchdogEv::task_spawn(int argc, char *argv[])
 {
+	// In FORMIC_EST_MODE 1 EKF2 must never see vision: formic_vio_est carries the VIO instead.
+	int32_t est_mode = 0;
+	param_get(param_find("FORMIC_EST_MODE"), &est_mode);
+
+	if (est_mode != 0) {
+		PX4_ERR("not started: FORMIC_EST_MODE is %" PRId32 ", needs 0", est_mode);
+		return PX4_ERROR;
+	}
+
 	FormicWatchdogEv *instance = new FormicWatchdogEv();
 
 	if (!instance) {

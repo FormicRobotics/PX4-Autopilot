@@ -59,6 +59,8 @@
 #include <uORB/topics/dds_flag.h>
 #include <uORB/topics/vehicle_odometry.h> // TODO: switch to vehicle_visual_odometry when available
 #include <uORB/topics/formic_ev_flag.h>
+#include <uORB/topics/formic_vio_est_status.h>
+#include <uORB/topics/formic_pos_req.h>
 
 #include "MspV1.hpp"
 #include "MessageDisplay/MessageDisplay.hpp"
@@ -182,6 +184,9 @@ private:
 	uORB::Subscription _dds_flag_sub{ORB_ID(dds_flag)};
 	uORB::Subscription _vehicle_vision_odometry_sub{ORB_ID(vehicle_visual_odometry)}; // TODO: switch to vehicle_visual_odometry when available
 	uORB::Subscription _formic_ev_flag_sub{ORB_ID(formic_ev_flag)};
+	uORB::Subscription _formic_vio_est_status_sub{ORB_ID(formic_vio_est_status)};
+	uORB::Subscription _formic_pos_req_sub{ORB_ID(formic_pos_req)};
+	bool _formic_vio_mode{false}; ///< FORMIC_EST_MODE 1: the VIO status comes from formic_vio_est
 
 	// local heartbeat
 	bool _heartbeat{false};

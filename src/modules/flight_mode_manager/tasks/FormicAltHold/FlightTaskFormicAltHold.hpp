@@ -78,6 +78,7 @@ private:
 	float _channel_values{0.f};
 	bool _terrain_hold_previous{false}; /**< true when vehicle was controlling height above a static ground position in the previous iteration */
 	bool _first_time{true};
+	bool _formic_vio_mode{false}; ///< FORMIC_EST_MODE 1: the estimator can switch between EKF2 and the VIO
  };
 
 using FlightTaskFormicAltHold = FormicAltitude;

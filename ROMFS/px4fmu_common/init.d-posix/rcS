@@ -279,9 +279,16 @@ then
 	attitude_estimator_q start
 fi
 
-# Formic EV watchdog. Always started; it self-gates on FORMIC_WDEV_EN (idles when 0),
-# so the parameter can be toggled at runtime without changing the startup script.
-formic_watchdog_ev start
+# Formic estimator modules for the design FORMIC_EST_MODE picks.
+# 0: the EV watchdog. Always started; it self-gates on FORMIC_WDEV_EN (idles when 0),
+#    so the parameter can be toggled at runtime without changing the startup script.
+# 1: formic_vio_est carries the VIO as estimator instance 1; EKF2 never sees vision.
+if param compare FORMIC_EST_MODE 1
+then
+	formic_vio_est start
+else
+	formic_watchdog_ev start
+fi
 
 if ! pwm_out_sim start -m sim
 then

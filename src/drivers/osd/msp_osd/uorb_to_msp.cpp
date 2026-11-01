@@ -803,4 +803,37 @@ msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_
 	return vio_status;
 }
 
+msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_vio_est_status_s &vio,
+		const vehicle_status_s &vehicle_status, const formic_pos_req_s &pos_req)
+{
+	msp_rendor_formicc_vio_status_t vio_status = {};
+	vio_status.subCommand = MSP_DP_WRITE_STRING;
+	vio_status.screenYPosition = 0x0F;
+	vio_status.screenXPosition = 0x17;
+	vio_status.systemElement = 0x00;
+	vio_status.iconIndex = 0;
+
+	const bool in_position = (vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_POSCTL)
+				 || (vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_POSITION_SLOW);
+	const bool degraded = (vio.vio_status == formic_vio_est_status_s::VIO_STATUS_DEGRADED);
+
+	// The str buffer is 8 bytes, so labels must be <= 7 chars.
+	const char *label = "";
+
+	if (in_position) {
+		label = degraded ? "POS-DEG" : "POS";
+
+	} else if (pos_req.pos_req) {
+		label = "WAIT"; // Position wanted, waiting for the VIO or the return delay
+
+	} else if (degraded) {
+		label = "DEGRAD";
+	}
+
+	memset(&vio_status.str[0], 0, sizeof(vio_status.str));
+	snprintf(&vio_status.str[0], sizeof(vio_status.str), "%s", label);
+
+	return vio_status;
+}
+
 } // namespace msp_osd

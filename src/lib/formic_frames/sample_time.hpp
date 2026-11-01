@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-namespace formic_watchdog_ev
+namespace formic_frames
 {
 
 /// Where the sample time of a pose comes from.
@@ -70,4 +70,4 @@ inline SampleTime resolve_sample_time(uint64_t sent_us, uint64_t sample_us, uint
 	return out;
 }
 
-} // namespace formic_watchdog_ev
+} // namespace formic_frames

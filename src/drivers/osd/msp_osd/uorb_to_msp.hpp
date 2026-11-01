@@ -62,7 +62,9 @@
 #include <uORB/topics/estimator_aid_source1d.h>
 #include <uORB/topics/total_arm_time.h>
 #include <uORB/topics/dds_flag.h>
-#include <uORB/topics/formic_ev_flag.h>			
+#include <uORB/topics/formic_ev_flag.h>
+#include <uORB/topics/formic_vio_est_status.h>
+#include <uORB/topics/formic_pos_req.h>			
 // PX4 events interface
 #include <px4_platform_common/events.h>
 
@@ -154,5 +156,9 @@ msp_rendor_formic_ring_t construct_rendor_FORMIC_RING(const dds_flag_s &dds_flag
 msp_rendor_formic_crosshairs_t construct_rendor_FORMIC_CROSSHAIRS(int osd_format);
 
 msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_ev_flag_s &formic_ev_flag);
+
+// FORMIC_EST_MODE 1: POS, POS-DEG, WAIT or DEGRAD from the VIO instance, the mode and the position request
+msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_vio_est_status_s &vio,
+		const vehicle_status_s &vehicle_status, const formic_pos_req_s &pos_req);
 
 } // namespace msp_osd

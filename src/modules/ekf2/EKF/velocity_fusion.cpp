@@ -76,6 +76,13 @@ bool Ekf::fuseVelocity(estimator_aid_source3d_s &aid_src)
 	return aid_src.fused;
 }
 
+void Ekf::resetHorizontalOutputVelocityTo(const Vector2f &new_vel_ne, float vel_var)
+{
+	// the output and the delayed state move by the same delta in resetHorizontalVelocityTo()
+	const Vector2f delta = new_vel_ne - Vector2f(getVelocity().xy());
+	resetHorizontalVelocityTo(Vector2f(_state.vel.xy()) + delta, vel_var);
+}
+
 void Ekf::resetHorizontalVelocityTo(const Vector2f &new_horz_vel, const Vector2f &new_horz_vel_var)
 {
 	const Vector2f delta_horz_vel = new_horz_vel - Vector2f(_state.vel);

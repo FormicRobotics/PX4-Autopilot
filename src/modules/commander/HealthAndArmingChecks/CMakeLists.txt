@@ -47,6 +47,7 @@ px4_add_library(health_and_arming_checks
 	checks/escCheck.cpp
 	checks/estimatorCheck.cpp
 	checks/failureDetectorCheck.cpp
+	checks/formicEstCheck.cpp
 	checks/flightTimeCheck.cpp
 	checks/geofenceCheck.cpp
 	checks/gyroCheck.cpp

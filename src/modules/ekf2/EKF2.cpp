@@ -218,6 +218,11 @@ EKF2::EKF2(bool multi_mode, const px4::wq_config_t &config, bool replay_mode):
 	_param_ekf2_gyr_b_lim(_params->ekf2_gyr_b_lim)
 {
 	AdvertiseTopics();
+
+	// FORMIC_EST_MODE 1 runs this EKF2 as instance 0 behind the selector, without vision
+	int32_t formic_est_mode = 0;
+	param_get(param_find("FORMIC_EST_MODE"), &formic_est_mode);
+	_formic_vio_mode = multi_mode && (formic_est_mode == 1);
 }
 
 EKF2::~EKF2()
@@ -803,6 +808,10 @@ void EKF2::Run()
 
 		if (_ekf.update()) {
 			perf_set_elapsed(_ekf_update_perf, hrt_elapsed_time(&ekf_update_start));
+
+			if (_formic_vio_mode) {
+				UpdateFormicVelocityReset(); // before publishing: the reset goes out with the new velocity
+			}
 
 			PublishLocalPosition(now);
 			PublishOdometry(now, imu_sample_new);
@@ -2199,6 +2208,35 @@ void EKF2::UpdateBaroSample(ekf2_timestamps_s &ekf2_timestamps)
 	}
 }
 #endif // CONFIG_EKF2_BAROMETER
+
+void EKF2::UpdateFormicVelocityReset()
+{
+	formic_ekf_vel_reset_s reset;
+
+	if (!_formic_ekf_vel_reset_sub.update(&reset) || reset.instance != _instance) {
+		return;
+	}
+
+	if (_formic_vel_reset_seen && reset.sequence == _formic_vel_reset_sequence) {
+		return;
+	}
+
+	_formic_vel_reset_seen = true;
+	_formic_vel_reset_sequence = reset.sequence;
+
+	const Vector2f vel_ne{reset.vel_ne};
+
+	if (!vel_ne.isAllFinite() || hrt_elapsed_time(&reset.timestamp) > 200_ms) {
+		return;
+	}
+
+	const float vel_var = PX4_ISFINITE(reset.vel_var) ? math::max(reset.vel_var, 0.01f) : 0.25f;
+	const Vector2f before{_ekf.getVelocity().xy()};
+	_ekf.resetHorizontalOutputVelocityTo(vel_ne, vel_var);
+
+	PX4_INFO("%d - horizontal velocity set from the VIO instance: %.2f %.2f -> %.2f %.2f m/s", _instance,
+		 (double)before(0), (double)before(1), (double)vel_ne(0), (double)vel_ne(1));
+}
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
 bool EKF2::UpdateExtVisionSample(ekf2_timestamps_s &ekf2_timestamps)

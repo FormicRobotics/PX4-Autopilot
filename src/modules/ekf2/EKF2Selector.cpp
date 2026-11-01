@@ -36,6 +36,7 @@
 using namespace time_literals;
 using matrix::Quatf;
 using matrix::Vector2f;
+using matrix::Vector3f;
 using math::constrain;
 using math::radians;
 
@@ -50,6 +51,13 @@ EKF2Selector::EKF2Selector() :
 	_vehicle_local_position_pub.advertise();
 	_vehicle_odometry_pub.advertise();
 	_wind_pub.advertise();
+
+	_formic_mode = (_param_formic_est_mode.get() == 1);
+
+	if (_formic_mode) {
+		PX4_INFO("FORMIC_EST_MODE 1: role policy, EKF2 instance %d, VIO instance %d", FORMIC_EKF_INSTANCE,
+			 FORMIC_VIO_INSTANCE);
+	}
 }
 
 EKF2Selector::~EKF2Selector()
@@ -534,6 +542,7 @@ void EKF2Selector::PublishVehicleLocalPosition()
 			_delta_vxy_reset.copyTo(local_position.delta_vxy);
 			local_position.delta_vz = _delta_vz_reset;
 			local_position.delta_heading = _delta_heading_reset;
+			local_position.delta_dist_bottom = _delta_hagl_reset;
 
 			local_position.timestamp = hrt_absolute_time();
 			_vehicle_local_position_pub.publish(local_position);
@@ -714,7 +723,10 @@ void EKF2Selector::Run()
 
 	// if no valid instance then force select first instance with valid IMU
 	if (_selected_instance == INVALID_INSTANCE) {
-		for (uint8_t i = 0; i < EKF2_MAX_INSTANCES; i++) {
+		// FORMIC_EST_MODE 1: EKF2 flies first
+		const uint8_t instances_to_try = _formic_mode ? FORMIC_EKF_INSTANCE + 1 : EKF2_MAX_INSTANCES;
+
+		for (uint8_t i = 0; i < instances_to_try; i++) {
 			if ((_instance[i].accel_device_id != 0)
 			    && (_instance[i].gyro_device_id != 0)) {
 
@@ -729,6 +741,12 @@ void EKF2Selector::Run()
 			ScheduleDelayed(100_ms);
 			return;
 		}
+	}
+
+	if (_formic_mode) {
+		FormicRun();
+		ScheduleDelayed(FILTER_UPDATE_PERIOD);
+		return;
 	}
 
 	if (updated) {
@@ -857,6 +875,25 @@ void EKF2Selector::PublishEstimatorSelectorStatus()
 		selector_status.accumulated_accel_error[i] = _accumulated_accel_error[i];
 	}
 
+	if (_formic_mode) {
+		selector_status.formic_role_active = true;
+		selector_status.role_primary = _formic_role;
+
+		for (int i = 0; i < 2; i++) {
+			selector_status.anchor_yaw[i] = _formic_anchor[i].psi;
+			selector_status.anchor_valid[i] = _formic_anchor_valid[i];
+
+			for (int j = 0; j < 3; j++) {
+				selector_status.anchor_shift[3 * i + j] = _formic_anchor[i].t(j);
+			}
+		}
+
+		selector_status.vio_segment = _formic_anchor_segment;
+		selector_status.ramp_active = _formic_ramp_active;
+		selector_status.handover_count = _formic_handover_count;
+		selector_status.ekf_vel_seed_pending = _formic_seed_pending;
+	}
+
 	selector_status.timestamp = hrt_absolute_time();
 	_estimator_selector_status_pub.publish(selector_status);
 	_last_status_publish = selector_status.timestamp;
@@ -879,6 +916,489 @@ void EKF2Selector::PrintStatus()
 			 (double)inst.combined_test_ratio, (double)inst.relative_test_ratio,
 			 (_selected_instance == i) ? "*" : "");
 	}
+
+	if (_formic_mode) {
+		PX4_INFO("FORMIC_EST_MODE 1: role %" PRIu8 "%s, %" PRIu32 " handovers, tilt ramp %s, velocity seed %s",
+			 _formic_role, (_formic_override != INVALID_INSTANCE) ? " (select_instance)" : "", _formic_handover_count,
+			 _formic_ramp_active ? "on" : "off", _formic_seed_pending ? "pending" : "idle");
+
+		for (int i = 0; i < 2; i++) {
+			PX4_INFO("anchor %d: %s yaw %.2f deg, shift %.2f %.2f %.2f m%s", i, _formic_anchor_valid[i] ? "" : "(none)",
+				 (double)math::degrees(_formic_anchor[i].psi), (double)_formic_anchor[i].t(0), (double)_formic_anchor[i].t(1),
+				 (double)_formic_anchor[i].t(2), (i == FORMIC_VIO_INSTANCE) ? "" : "");
+		}
+
+		PX4_INFO("instance %d anchor belongs to VIO segment %" PRIu32, FORMIC_VIO_INSTANCE, _formic_anchor_segment);
+	}
+}
+
+void EKF2Selector::FormicRun()
+{
+	const hrt_abstime now = hrt_absolute_time();
+
+	formic_pos_req_s pos_req{};
+	_formic_pos_req_sub.copy(&pos_req);
+
+	formic_vio_est_status_s vio{};
+	const bool vio_fresh = _formic_vio_est_status_sub.copy(&vio) && (now < vio.timestamp + 200_ms);
+
+	// ekf2 select_instance: a bench override of the role, until changed (any other value clears it)
+	const uint8_t request = _request_instance.load();
+
+	if (request != INVALID_INSTANCE) {
+		_formic_override = (request <= FORMIC_VIO_INSTANCE) ? request : INVALID_INSTANCE;
+		_request_instance.store(INVALID_INSTANCE);
+		PX4_INFO("role override: %s", (_formic_override == INVALID_INSTANCE) ? "cleared" :
+			 (_formic_override == FORMIC_VIO_INSTANCE) ? "VIO" : "EKF2");
+	}
+
+	const bool vio_available = _available_instances > FORMIC_VIO_INSTANCE;
+	const bool vio_can_enter = vio_available && vio_fresh && vio.pos_offerable
+				   && _instance[FORMIC_VIO_INSTANCE].healthy.get_state();
+	const bool vio_can_stay = vio_available && vio_fresh && !vio.gap_exceeded
+				  && !_instance[FORMIC_VIO_INSTANCE].timeout;
+	const bool want_vio = (_formic_override != INVALID_INSTANCE) ? (_formic_override == FORMIC_VIO_INSTANCE)
+			      : pos_req.use_vision_now;
+
+	uint8_t role = FORMIC_EKF_INSTANCE;
+
+	if (_selected_instance == FORMIC_VIO_INSTANCE) {
+		role = (want_vio && vio_can_stay) ? FORMIC_VIO_INSTANCE : FORMIC_EKF_INSTANCE;
+
+		// backstop: the VIO instance cannot carry on and commander has not left Position mode yet
+		if (want_vio && !vio_can_stay) {
+			if (!_formic_backstop_warned) {
+				PX4_WARN("VIO instance failed (gap over FORMIC_VIO_GAP): switching to EKF2");
+				_formic_backstop_warned = true;
+			}
+
+			_formic_override = INVALID_INSTANCE;
+		}
+
+	} else {
+		role = (want_vio && vio_can_enter) ? FORMIC_VIO_INSTANCE : FORMIC_EKF_INSTANCE;
+	}
+
+	if (role != _formic_role) {
+		_selector_status_publish = true;
+	}
+
+	_formic_role = role;
+
+	if (role == _selected_instance) {
+		_formic_seed_pending = false;
+
+		if (role == FORMIC_VIO_INSTANCE) {
+			_formic_backstop_warned = false;
+		}
+
+	} else if (role == FORMIC_EKF_INSTANCE) {
+		// a handover because the VIO failed steps the tilt: ramping away from bad data only makes it last longer
+		const bool requested = vio_fresh && vio.healthy;
+		const bool seed = (_param_formic_ho_vseed.get() != 0) && vio_fresh && vio.vel_trusted
+				  && !_instance[FORMIC_EKF_INSTANCE].timeout;
+		bool switch_now = true;
+
+		if (seed) {
+			if (!_formic_seed_pending) {
+				// switch once EKF2 has published the VIO's horizontal velocity, so its velocity does not step
+				_formic_seed_pending = FormicRequestVelocitySeed();
+				switch_now = !_formic_seed_pending;
+
+			} else {
+				vehicle_local_position_s lpos0;
+
+				if (_instance[FORMIC_EKF_INSTANCE].estimator_local_position_sub.copy(&lpos0)
+				    && (lpos0.vxy_reset_counter != _formic_seed_vxy_counter)) {
+					switch_now = true;
+
+				} else if (now > _formic_seed_deadline) {
+					PX4_WARN("EKF2 did not take the VIO velocity in time: switching without it");
+					switch_now = true;
+
+				} else {
+					switch_now = false;
+				}
+			}
+		}
+
+		if (switch_now) {
+			_formic_seed_pending = false;
+			FormicHandover(FORMIC_EKF_INSTANCE, requested, vio.segment);
+		}
+
+	} else {
+		_formic_seed_pending = false;
+		FormicHandover(FORMIC_VIO_INSTANCE, true, vio.segment);
+	}
+
+	// the selector status carries the anchors: logs and the Jetson convert between the frames with it
+	if (_selector_status_publish || (now > _last_status_publish + 100_ms) || _accel_fault_detected
+	    || _gyro_fault_detected) {
+		PublishEstimatorSelectorStatus();
+		_selector_status_publish = false;
+	}
+
+	FormicPublishVehicleAttitude();
+	FormicPublishVehicleLocalPosition();
+	PublishVehicleGlobalPosition();
+	FormicPublishVehicleOdometry();
+	PublishWindEstimate();
+}
+
+bool EKF2Selector::FormicRequestVelocitySeed()
+{
+	vehicle_attitude_s att0;
+	vehicle_local_position_s lpos0;
+
+	if (!_instance[FORMIC_EKF_INSTANCE].estimator_attitude_sub.copy(&att0)
+	    || !_instance[FORMIC_EKF_INSTANCE].estimator_local_position_sub.copy(&lpos0)) {
+		return false;
+	}
+
+	formic_frames::PoseSample pub_att;
+	formic_frames::PoseSample pub_lpos;
+
+	if (!_formic_att_history.sampleAt(att0.timestamp_sample, pub_att)
+	    || !_formic_lpos_history.sampleAt(lpos0.timestamp_sample, pub_lpos)) {
+		return false;
+	}
+
+	// EKF2 will be anchored onto the published heading: its frame differs from the published one by this yaw
+	const formic_frames::Anchor anchor{matrix::wrap_pi(formic_frames::yaw_of(pub_att.q) - formic_frames::yaw_of(Quatf(att0.q))), {}};
+	const Vector2f vel_ne = anchor.unapplyVector(Vector2f(pub_lpos.v(0), pub_lpos.v(1)));
+
+	formic_ekf_vel_reset_s reset{};
+	reset.instance = FORMIC_EKF_INSTANCE;
+	vel_ne.copyTo(reset.vel_ne);
+	reset.vel_var = math::max(_local_position_last.evh * _local_position_last.evh, 0.01f);
+	reset.sequence = ++_formic_seed_sequence;
+	reset.timestamp = hrt_absolute_time();
+	_formic_ekf_vel_reset_pub.publish(reset);
+
+	_formic_seed_vxy_counter = lpos0.vxy_reset_counter;
+	_formic_seed_deadline = reset.timestamp + 100_ms;
+	return true;
+}
+
+void EKF2Selector::FormicHandover(uint8_t new_instance, bool requested, uint32_t vio_segment)
+{
+	vehicle_attitude_s att;
+	vehicle_local_position_s lpos;
+
+	if (!_instance[new_instance].estimator_attitude_sub.copy(&att)
+	    || !_instance[new_instance].estimator_local_position_sub.copy(&lpos)) {
+		return;
+	}
+
+	const uint8_t old_instance = _selected_instance;
+	const Quatf q_inst(att.q);
+	const Vector3f p_inst(lpos.x, lpos.y, lpos.z);
+	const Vector3f v_inst(lpos.vx, lpos.vy, lpos.vz);
+
+	// the published pose at the new instance's sample times
+	formic_frames::PoseSample pub_att;
+	formic_frames::PoseSample pub_lpos;
+	const bool have_pub = _formic_att_history.sampleAt(att.timestamp_sample, pub_att)
+			      && _formic_lpos_history.sampleAt(lpos.timestamp_sample, pub_lpos);
+
+	formic_frames::Anchor anchor = _formic_anchor[new_instance];
+	bool snap_back = false;
+
+	if (!have_pub) {
+		if (!_formic_anchor_valid[new_instance]) {
+			anchor = formic_frames::Anchor{};
+		}
+
+	} else if ((new_instance == FORMIC_VIO_INSTANCE) && _formic_anchor_valid[FORMIC_VIO_INSTANCE]
+		   && (vio_segment == _formic_anchor_segment)) {
+		// same VIO segment: back to its frame, stepping out EKF2's drift since the last switch
+		snap_back = true;
+
+	} else {
+		// a new anchor: the published heading and position carry on
+		anchor.psi = matrix::wrap_pi(formic_frames::yaw_of(pub_att.q) - formic_frames::yaw_of(q_inst));
+		anchor.t = pub_lpos.p - matrix::Dcmf(anchor.rotation()) * p_inst;
+	}
+
+	const Quatf q_anchored = anchor.apply(q_inst);
+	const Vector3f d_theta = have_pub ? formic_frames::tilt_offset(pub_att.q, q_anchored) : Vector3f{};
+	const bool ramp = requested && have_pub && (_param_formic_ho_tau.get() > 0.f);
+	const Quatf q_out = ramp ? formic_frames::apply_tilt(d_theta, 1.f, q_anchored) : q_anchored;
+	const Vector3f p_out = anchor.applyPosition(p_inst);
+	const Vector3f v_out = anchor.applyVector(v_inst);
+
+	if (!SelectInstance(new_instance)) {
+		return;
+	}
+
+	_formic_anchor[new_instance] = anchor;
+	_formic_anchor_valid[new_instance] = true;
+
+	if (new_instance == FORMIC_VIO_INSTANCE) {
+		_formic_anchor_segment = vio_segment;
+	}
+
+	formic_frames::Step step{};
+
+	if (have_pub) {
+		step = formic_frames::step_between(pub_att.q, pub_lpos.p, pub_lpos.v, q_out, p_out, v_out);
+
+		// the velocity always steps: the flight tasks and mc_pos_control restart from the new one
+		_delta_vxy_reset = Vector2f(step.delta_v(0), step.delta_v(1));
+		++_vxy_reset_counter;
+		_delta_vz_reset = step.delta_v(2);
+		++_vz_reset_counter;
+
+		if (snap_back) {
+			_delta_xy_reset = Vector2f(step.delta_p(0), step.delta_p(1));
+			++_xy_reset_counter;
+			_delta_z_reset = step.delta_p(2);
+			++_z_reset_counter;
+			_delta_heading_reset = step.delta_heading;
+			++_heading_reset_counter;
+		}
+
+		if (snap_back || !ramp) {
+			_delta_q_reset = step.delta_q;
+			++_quat_reset_counter;
+		}
+
+		if (_local_position_last.dist_bottom_valid && lpos.dist_bottom_valid
+		    && fabsf(lpos.dist_bottom - _local_position_last.dist_bottom) > 1e-3f) {
+			_delta_hagl_reset = lpos.dist_bottom - _local_position_last.dist_bottom;
+			++_hagl_reset_counter;
+		}
+
+		++_odometry_reset_counter;
+	}
+
+	_formic_ramp_active = ramp && (d_theta.norm() > 1e-5f);
+	_formic_ramp_dtheta = d_theta;
+	_formic_ramp_t0 = att.timestamp_sample;
+
+	// take the new instance's own reset counters as they are now
+	_formic_att_baseline = false;
+	_formic_lpos_baseline = false;
+	_formic_odom_baseline = false;
+
+	_formic_handover_count++;
+	_selector_status_publish = true;
+
+	PX4_INFO("handover %" PRIu8 " -> %" PRIu8 " (%s): velocity step %.2f %.2f %.2f m/s, tilt %.2f deg %s%s",
+		 old_instance, new_instance, requested ? "requested" : "VIO failed",
+		 (double)step.delta_v(0), (double)step.delta_v(1), (double)step.delta_v(2),
+		 (double)math::degrees(d_theta.norm()), ramp ? "ramped" : "stepped",
+		 snap_back ? ", back to the VIO segment frame" : "");
+
+	if (snap_back) {
+		PX4_INFO("snap back: %.2f %.2f %.2f m, heading %.1f deg", (double)step.delta_p(0), (double)step.delta_p(1),
+			 (double)step.delta_p(2), (double)math::degrees(step.delta_heading));
+	}
+}
+
+Quatf EKF2Selector::FormicAttitudeOut(const Quatf &q, uint64_t timestamp_sample)
+{
+	const Quatf q_anchored = _formic_anchor[_selected_instance].apply(q);
+
+	if (!_formic_ramp_active) {
+		return q_anchored;
+	}
+
+	const float dt = (timestamp_sample > _formic_ramp_t0) ? (timestamp_sample - _formic_ramp_t0) * 1e-6f : 0.f;
+	const float scale = formic_frames::ramp_scale(dt, _param_formic_ho_tau.get());
+
+	if (scale < 1e-3f) {
+		_formic_ramp_active = false;
+		_selector_status_publish = true;
+		return q_anchored;
+	}
+
+	return formic_frames::apply_tilt(_formic_ramp_dtheta, scale, q_anchored);
+}
+
+void EKF2Selector::FormicPublishVehicleAttitude()
+{
+	vehicle_attitude_s attitude;
+
+	if (!_instance[_selected_instance].estimator_attitude_sub.update(&attitude)) {
+		return;
+	}
+
+	const formic_frames::Anchor &anchor = _formic_anchor[_selected_instance];
+
+	// the instance's own resets, turned into the published frame
+	if (!_formic_att_baseline) {
+		_formic_inst_quat_counter = attitude.quat_reset_counter;
+		_formic_att_baseline = true;
+
+	} else if (attitude.quat_reset_counter != _formic_inst_quat_counter) {
+		_formic_inst_quat_counter = attitude.quat_reset_counter;
+		++_quat_reset_counter;
+		_delta_q_reset = anchor.applyDeltaQ(Quatf(attitude.delta_q_reset));
+	}
+
+	const Quatf q_out = FormicAttitudeOut(Quatf(attitude.q), attitude.timestamp_sample);
+
+	// ensure monotonically increasing timestamp_sample through a handover, and don't publish a stale estimate
+	if ((attitude.timestamp_sample <= _attitude_last.timestamp_sample) || (hrt_elapsed_time(&attitude.timestamp) > 10_ms)) {
+		return;
+	}
+
+	q_out.copyTo(attitude.q);
+	attitude.quat_reset_counter = _quat_reset_counter;
+	_delta_q_reset.copyTo(attitude.delta_q_reset);
+	attitude.timestamp = hrt_absolute_time();
+	_vehicle_attitude_pub.publish(attitude);
+	_attitude_last = attitude;
+
+	formic_frames::PoseSample s;
+	s.time_us = attitude.timestamp_sample;
+	s.q = q_out;
+	_formic_att_history.push(s);
+}
+
+void EKF2Selector::FormicPublishVehicleLocalPosition()
+{
+	vehicle_local_position_s lpos;
+
+	if (!_instance[_selected_instance].estimator_local_position_sub.update(&lpos)) {
+		return;
+	}
+
+	const formic_frames::Anchor &anchor = _formic_anchor[_selected_instance];
+
+	// the instance's own resets, turned into the published frame
+	if (!_formic_lpos_baseline) {
+		_formic_inst_xy_counter = lpos.xy_reset_counter;
+		_formic_inst_z_counter = lpos.z_reset_counter;
+		_formic_inst_vxy_counter = lpos.vxy_reset_counter;
+		_formic_inst_vz_counter = lpos.vz_reset_counter;
+		_formic_inst_heading_counter = lpos.heading_reset_counter;
+		_formic_inst_hagl_counter = lpos.dist_bottom_reset_counter;
+		_formic_lpos_baseline = true;
+
+	} else {
+		if (lpos.xy_reset_counter != _formic_inst_xy_counter) {
+			_formic_inst_xy_counter = lpos.xy_reset_counter;
+			++_xy_reset_counter;
+			_delta_xy_reset = anchor.applyVector(Vector2f(lpos.delta_xy));
+		}
+
+		if (lpos.z_reset_counter != _formic_inst_z_counter) {
+			_formic_inst_z_counter = lpos.z_reset_counter;
+			++_z_reset_counter;
+			_delta_z_reset = lpos.delta_z;
+		}
+
+		if (lpos.vxy_reset_counter != _formic_inst_vxy_counter) {
+			_formic_inst_vxy_counter = lpos.vxy_reset_counter;
+			++_vxy_reset_counter;
+			_delta_vxy_reset = anchor.applyVector(Vector2f(lpos.delta_vxy));
+		}
+
+		if (lpos.vz_reset_counter != _formic_inst_vz_counter) {
+			_formic_inst_vz_counter = lpos.vz_reset_counter;
+			++_vz_reset_counter;
+			_delta_vz_reset = lpos.delta_vz;
+		}
+
+		if (lpos.heading_reset_counter != _formic_inst_heading_counter) {
+			_formic_inst_heading_counter = lpos.heading_reset_counter;
+			++_heading_reset_counter;
+			_delta_heading_reset = lpos.delta_heading;
+		}
+
+		if (lpos.dist_bottom_reset_counter != _formic_inst_hagl_counter) {
+			_formic_inst_hagl_counter = lpos.dist_bottom_reset_counter;
+			++_hagl_reset_counter;
+			_delta_hagl_reset = lpos.delta_dist_bottom;
+		}
+	}
+
+	if ((lpos.timestamp_sample <= _local_position_last.timestamp_sample)
+	    || (hrt_elapsed_time(&lpos.timestamp) > 20_ms)) {
+		return;
+	}
+
+	const Vector3f p = anchor.applyPosition(Vector3f(lpos.x, lpos.y, lpos.z));
+	const Vector3f v = anchor.applyVector(Vector3f(lpos.vx, lpos.vy, lpos.vz));
+	const Vector3f a = anchor.applyVector(Vector3f(lpos.ax, lpos.ay, lpos.az));
+
+	lpos.x = p(0);
+	lpos.y = p(1);
+	lpos.z = p(2);
+	lpos.vx = v(0);
+	lpos.vy = v(1);
+	lpos.vz = v(2);
+	lpos.ax = a(0);
+	lpos.ay = a(1);
+	lpos.az = a(2);
+	lpos.heading = anchor.applyHeading(lpos.heading);
+	lpos.unaided_heading = anchor.applyHeading(lpos.unaided_heading);
+
+	lpos.xy_reset_counter = _xy_reset_counter;
+	lpos.z_reset_counter = _z_reset_counter;
+	lpos.vxy_reset_counter = _vxy_reset_counter;
+	lpos.vz_reset_counter = _vz_reset_counter;
+	lpos.heading_reset_counter = _heading_reset_counter;
+	lpos.dist_bottom_reset_counter = _hagl_reset_counter;
+
+	_delta_xy_reset.copyTo(lpos.delta_xy);
+	lpos.delta_z = _delta_z_reset;
+	_delta_vxy_reset.copyTo(lpos.delta_vxy);
+	lpos.delta_vz = _delta_vz_reset;
+	lpos.delta_heading = _delta_heading_reset;
+	lpos.delta_dist_bottom = _delta_hagl_reset;
+
+	lpos.timestamp = hrt_absolute_time();
+	_vehicle_local_position_pub.publish(lpos);
+	_local_position_last = lpos;
+
+	formic_frames::PoseSample s;
+	s.time_us = lpos.timestamp_sample;
+	s.p = p;
+	s.v = v;
+	_formic_lpos_history.push(s);
+}
+
+void EKF2Selector::FormicPublishVehicleOdometry()
+{
+	vehicle_odometry_s odometry;
+
+	if (!_instance[_selected_instance].estimator_odometry_sub.update(&odometry)) {
+		return;
+	}
+
+	if (!_formic_odom_baseline) {
+		_formic_inst_odom_counter = odometry.reset_counter;
+		_formic_odom_baseline = true;
+
+	} else if (odometry.reset_counter != _formic_inst_odom_counter) {
+		_formic_inst_odom_counter = odometry.reset_counter;
+		++_odometry_reset_counter;
+	}
+
+	if ((odometry.timestamp_sample <= _odometry_last.timestamp_sample)
+	    || (hrt_elapsed_time(&odometry.timestamp) > 20_ms)) {
+		return;
+	}
+
+	const formic_frames::Anchor &anchor = _formic_anchor[_selected_instance];
+
+	if (odometry.pose_frame == vehicle_odometry_s::POSE_FRAME_NED) {
+		anchor.applyPosition(Vector3f(odometry.position)).copyTo(odometry.position);
+		FormicAttitudeOut(Quatf(odometry.q), odometry.timestamp_sample).copyTo(odometry.q);
+	}
+
+	if (odometry.velocity_frame == vehicle_odometry_s::VELOCITY_FRAME_NED) {
+		anchor.applyVector(Vector3f(odometry.velocity)).copyTo(odometry.velocity);
+	}
+
+	odometry.reset_counter = _odometry_reset_counter;
+	odometry.timestamp = hrt_absolute_time();
+	_vehicle_odometry_pub.publish(odometry);
+	_odometry_last = odometry;
 }
 
 

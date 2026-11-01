@@ -55,6 +55,12 @@
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/vehicle_odometry.h>
 #include <uORB/topics/wind.h>
+#include <uORB/topics/formic_ekf_vel_reset.h>
+#include <uORB/topics/formic_pos_req.h>
+#include <uORB/topics/formic_vio_est_status.h>
+
+#include <lib/formic_frames/anchor.hpp>
+#include <lib/formic_frames/pose_history.hpp>
 
 #if CONSTRAINED_MEMORY
 # define EKF2_MAX_INSTANCES 2
@@ -95,6 +101,31 @@ private:
 
 	// Update the error scores for all available instances
 	bool UpdateErrorScores();
+
+	// FORMIC_EST_MODE 1: EKF2 is instance 0 and flies Altitude mode, formic_vio_est is instance 1 and
+	// flies Position mode. A role policy picks the primary from formic_pos_req.use_vision_now; each
+	// instance is published through an anchor (a rotation about down and a shift) that keeps the
+	// published frame: one frame per VIO segment.
+	static constexpr uint8_t FORMIC_EKF_INSTANCE{0};
+	static constexpr uint8_t FORMIC_VIO_INSTANCE{1};
+
+	void FormicRun();
+
+	/// Asks EKF2 to take the published horizontal velocity before the switch to it. false: not possible now.
+	bool FormicRequestVelocitySeed();
+
+	/**
+	 * Switches the primary to `new_instance` and anchors it.
+	 * @param requested a requested handover ramps the tilt; one because the VIO failed steps it
+	 */
+	void FormicHandover(uint8_t new_instance, bool requested, uint32_t vio_segment);
+
+	/// Attitude of the primary as published: anchored, with the tilt ramp.
+	matrix::Quatf FormicAttitudeOut(const matrix::Quatf &q, uint64_t timestamp_sample);
+
+	void FormicPublishVehicleAttitude();
+	void FormicPublishVehicleLocalPosition();
+	void FormicPublishVehicleOdometry();
 
 	// Subscriptions (per estimator instance)
 	struct EstimatorInstance {
@@ -234,6 +265,44 @@ private:
 	uint8_t _global_position_instance_prev{INVALID_INSTANCE};
 	uint8_t _odometry_instance_prev{INVALID_INSTANCE};
 
+	// FORMIC_EST_MODE 1
+	bool _formic_mode{false};                         ///< FORMIC_EST_MODE 1 at boot
+	formic_frames::Anchor _formic_anchor[2] {};        ///< per instance: published = anchor * instance
+	bool _formic_anchor_valid[2] {true, false};       ///< EKF2 is published as it is at boot
+	uint32_t _formic_anchor_segment{0};               ///< VIO segment of the instance 1 anchor
+	matrix::Vector3f _formic_ramp_dtheta{};           ///< tilt removed by the ramp, earth frame, rad
+	uint64_t _formic_ramp_t0{0};
+	bool _formic_ramp_active{false};
+	uint8_t _formic_role{FORMIC_EKF_INSTANCE};
+	uint8_t _formic_override{INVALID_INSTANCE};       ///< ekf2 select_instance in FORMIC_EST_MODE 1 (bench)
+	uint32_t _formic_handover_count{0};
+	bool _formic_backstop_warned{false};
+
+	bool _formic_seed_pending{false};
+	hrt_abstime _formic_seed_deadline{0};
+	uint8_t _formic_seed_vxy_counter{0};
+	uint8_t _formic_seed_sequence{0};
+
+	formic_frames::PoseHistory<64> _formic_att_history{};   ///< published attitude
+	formic_frames::PoseHistory<64> _formic_lpos_history{};  ///< published position and velocity
+
+	// the primary instance's own reset counters at the last publish; taken anew after a handover
+	bool _formic_att_baseline{false};
+	bool _formic_lpos_baseline{false};
+	bool _formic_odom_baseline{false};
+	uint8_t _formic_inst_quat_counter{0};
+	uint8_t _formic_inst_xy_counter{0};
+	uint8_t _formic_inst_z_counter{0};
+	uint8_t _formic_inst_vxy_counter{0};
+	uint8_t _formic_inst_vz_counter{0};
+	uint8_t _formic_inst_heading_counter{0};
+	uint8_t _formic_inst_hagl_counter{0};
+	uint8_t _formic_inst_odom_counter{0};
+
+	uORB::Subscription _formic_pos_req_sub{ORB_ID(formic_pos_req)};
+	uORB::Subscription _formic_vio_est_status_sub{ORB_ID(formic_vio_est_status)};
+	uORB::Publication<formic_ekf_vel_reset_s> _formic_ekf_vel_reset_pub{ORB_ID(formic_ekf_vel_reset)};
+
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	uORB::Subscription _sensors_status_imu{ORB_ID(sensors_status_imu)};
 
@@ -251,7 +320,10 @@ private:
 		(ParamFloat<px4::params::EKF2_SEL_IMU_RAT>) _param_ekf2_sel_imu_angle_rate,
 		(ParamFloat<px4::params::EKF2_SEL_IMU_ANG>) _param_ekf2_sel_imu_angle,
 		(ParamFloat<px4::params::EKF2_SEL_IMU_ACC>) _param_ekf2_sel_imu_accel,
-		(ParamFloat<px4::params::EKF2_SEL_IMU_VEL>) _param_ekf2_sel_imu_velocity
+		(ParamFloat<px4::params::EKF2_SEL_IMU_VEL>) _param_ekf2_sel_imu_velocity,
+		(ParamInt<px4::params::FORMIC_EST_MODE>) _param_formic_est_mode,
+		(ParamFloat<px4::params::FORMIC_HO_TAU>) _param_formic_ho_tau,
+		(ParamInt<px4::params::FORMIC_HO_VSEED>) _param_formic_ho_vseed
 	)
 };
 #endif // !EKF2SELECTOR_HPP

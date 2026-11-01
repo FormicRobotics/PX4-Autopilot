@@ -89,6 +89,7 @@
 #include <uORB/topics/yaw_estimator_status.h>
 #include <uORB/topics/formic_pos_req.h>
 #include <uORB/topics/formic_vehicle_odometry.h>
+#include <uORB/topics/formic_ekf_vel_reset.h>
 
 #if defined(CONFIG_EKF2_AIRSPEED)
 # include <uORB/topics/airspeed.h>
@@ -336,6 +337,13 @@ private:
 	bool _formic_pos_req_prev{false};
 	uORB::Subscription _formic_odom_sub{ORB_ID(formic_odom)};
 	uint64_t _formic_epoch_prev{0};	///< last VIO epoch seen, 0 = none yet
+
+	// FORMIC_EST_MODE 1: the selector sets EKF2's horizontal velocity at a handover from the VIO instance
+	void UpdateFormicVelocityReset();
+	bool _formic_vio_mode{false};	///< FORMIC_EST_MODE 1 at boot
+	uORB::Subscription _formic_ekf_vel_reset_sub{ORB_ID(formic_ekf_vel_reset)};
+	uint8_t _formic_vel_reset_sequence{0};
+	bool _formic_vel_reset_seen{false};
 	// add by naor //
 
 	uORB::PublicationMulti<estimator_bias3d_s> _estimator_ev_pos_bias_pub{ORB_ID(estimator_ev_pos_bias)};

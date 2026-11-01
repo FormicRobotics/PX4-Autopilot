@@ -43,6 +43,10 @@ UserModeIntention::UserModeIntention(const vehicle_status_s &vehicle_status,
 	: _vehicle_status(vehicle_status), _health_and_arming_checks(health_and_arming_checks),
 	  _handler(handler)
 {
+	int32_t formic_est_mode = 0;
+	param_get(param_find("FORMIC_EST_MODE"), &formic_est_mode);
+	_formic_vio_mode = (formic_est_mode == 1);
+	_param_formic_ret_delay = param_find("FORMIC_RET_DELAY");
 }
 
 bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource source, bool allow_fallback,
@@ -139,6 +143,10 @@ bool UserModeIntention::modeRequiresPosition(uint8_t nav_state) const
 
 void UserModeIntention::tick()
 {
+	if (_formic_vio_mode) {
+		updateVisionRole();
+	}
+
 	///////add by naor ////////////////
 
 	if (_pending_nav_state == UINT8_MAX) {
@@ -186,8 +194,65 @@ void UserModeIntention::onFailsafeNavState()
 	publish_formic_pos_req(false);
 }
 
+void UserModeIntention::updateVisionRole()
+{
+	const hrt_abstime now = hrt_absolute_time();
+
+	formic_vio_est_status_s vio{};
+	const bool vio_fresh = _formic_vio_est_status_sub.copy(&vio) && (now < vio.timestamp + 200_ms);
+	const bool offerable = vio_fresh && vio.pos_offerable;
+
+	if (!offerable) {
+		_vio_offerable_since_us = 0;
+
+	} else if (_vio_offerable_since_us == 0) {
+		_vio_offerable_since_us = now;
+	}
+
+	const bool nav_pos = modeRequiresPosition(_vehicle_status.nav_state);
+
+	if (nav_pos) {
+		_last_nav_pos_us = now;
+	}
+
+	// leaving Position: the estimator stays until the new mode has been out for a moment
+	const bool mode_change_settling = (_last_nav_pos_us != 0) && (now < _last_nav_pos_us + 50_ms);
+
+	const bool intention_pos = modeRequiresPosition(_user_intented_nav_state);
+	const bool wanted = intention_pos || (_pending_nav_state != UINT8_MAX && modeRequiresPosition(_pending_nav_state));
+
+	// after a failsafe dropped Position mode, return only once the VIO has been offerable for FORMIC_RET_DELAY
+	const bool returning = isArmed() && intention_pos && !nav_pos;
+	float ret_delay_s = 3.f;
+
+	if (_param_formic_ret_delay != PARAM_INVALID) {
+		param_get(_param_formic_ret_delay, &ret_delay_s);
+	}
+
+	const bool ret_ok = !returning
+			    || (offerable && (now >= _vio_offerable_since_us + static_cast<hrt_abstime>(ret_delay_s * 1e6f)));
+
+	const bool use_vision_now = nav_pos || mode_change_settling || (wanted && offerable && ret_ok);
+
+	if (use_vision_now != _use_vision_now) {
+		_use_vision_now = use_vision_now;
+		publish_formic_pos_req(_pos_req_last);
+	}
+}
+
 bool UserModeIntention::evReadyForPosition()
 {
+	if (_formic_vio_mode) {
+		// Position mode flies on the VIO instance: it must be the primary already
+		estimator_selector_status_s selector{};
+		formic_vio_est_status_s vio{};
+		const hrt_abstime now = hrt_absolute_time();
+
+		return _estimator_selector_status_sub.copy(&selector) && (now < selector.timestamp + 1_s)
+		       && (selector.primary_instance == 1)
+		       && _formic_vio_est_status_sub.copy(&vio) && (now < vio.timestamp + 200_ms) && vio.healthy;
+	}
+
 	formic_ev_flag_s formic_ev_flag{};
 
 	if (!_formic_ev_flag_sub.copy(&formic_ev_flag)) {
@@ -204,7 +269,9 @@ void UserModeIntention::publish_formic_pos_req(bool pos_requested)
 {
 	formic_pos_req_s pos_req{};
 	pos_req.pos_req = pos_requested;
+	pos_req.use_vision_now = _use_vision_now;
 	pos_req.timestamp = hrt_absolute_time();
+	_pos_req_last = pos_requested;
 	_formic_pos_req_pub.publish(pos_req);
 
 

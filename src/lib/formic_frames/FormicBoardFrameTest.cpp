@@ -4,8 +4,8 @@
 
 #include "board_frame.hpp"
 
-using formic_watchdog_ev::body_from_sensor;
-using formic_watchdog_ev::sensor_to_body_orientation;
+using formic_frames::body_from_sensor;
+using formic_frames::sensor_to_body_orientation;
 using matrix::Dcmf;
 using matrix::Eulerf;
 using matrix::Quatf;

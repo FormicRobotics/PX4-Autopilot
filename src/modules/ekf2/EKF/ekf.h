@@ -320,6 +320,10 @@ public:
 
 	// return the amount the local horizontal velocity changed in the last reset and the number of reset events
 	uint8_t get_velNE_reset_count() const { return _state_reset_status.reset_count.velNE; }
+	// FORMIC_EST_MODE 1: at a handover from the VIO instance, set the published (output) horizontal
+	// velocity, shifting the delayed state by the same amount. Published as a velNE reset.
+	void resetHorizontalOutputVelocityTo(const Vector2f &new_vel_ne, float vel_var);
+
 	void get_velNE_reset(float delta[2], uint8_t *counter) const
 	{
 		_state_reset_status.velNE_change.copyTo(delta);

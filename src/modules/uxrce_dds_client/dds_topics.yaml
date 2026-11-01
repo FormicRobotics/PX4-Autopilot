@@ -148,6 +148,15 @@ publications:
   type: px4_msgs::msg::FormicEvFlag
   rate_limit: 10
 
+# FORMIC_EST_MODE 1: the VIO instance's health, and the selector's role and anchors
+- topic: /fmu/out/formic_vio_est_status
+  type: px4_msgs::msg::FormicVioEstStatus
+  rate_limit: 10
+
+- topic: /fmu/out/estimator_selector_status
+  type: px4_msgs::msg::EstimatorSelectorStatus
+  rate_limit: 10
+
 - topic: /fmu/out/manual_control_switches
   type: px4_msgs::msg::ManualControlSwitches
   rate_limit: 50

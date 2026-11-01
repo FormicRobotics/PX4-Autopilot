@@ -6,7 +6,7 @@
 
 #include <matrix/math.hpp>
 
-namespace formic_watchdog_ev
+namespace formic_frames
 {
 
 /**
@@ -60,4 +60,4 @@ inline bool sensor_to_body_orientation(float q[4], const matrix::Dcmf &body_from
 	return true;
 }
 
-} // namespace formic_watchdog_ev
+} // namespace formic_frames

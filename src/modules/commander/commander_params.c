@@ -1085,3 +1085,36 @@ PARAM_DEFINE_INT32(FORMIC_VIO_MF, 5);
 
 
 
+
+/**
+ * Formic estimator design
+ *
+ * Picks the estimator design at boot.
+ *
+ * 0: Position mode flies on EKF2 fused with vision. formic_watchdog_ev forwards
+ * formic_odom to EKF2.
+ *
+ * 1: Position mode flies on the VIO through formic_vio_est (estimator instance 1).
+ * EKF2 (instance 0) never sees vision and flies Altitude mode. Needs
+ * SENS_IMU_MODE 0 and EKF2_MULTI_IMU 1; arming is refused otherwise.
+ *
+ * @group Commander
+ * @value 0 EKF2 with vision
+ * @value 1 VIO flies Position mode
+ * @reboot_required true
+ */
+PARAM_DEFINE_INT32(FORMIC_EST_MODE, 0);
+
+/**
+ * Formic return to Position delay
+ *
+ * FORMIC_EST_MODE 1. After a VIO failsafe dropped Position mode to Altitude mode, Position mode
+ * comes back this long after the VIO is offerable (healthy and NOMINAL) again.
+ *
+ * @group Commander
+ * @unit s
+ * @min 0.0
+ * @max 30.0
+ * @decimal 1
+ */
+PARAM_DEFINE_FLOAT(FORMIC_RET_DELAY, 3.0f);
