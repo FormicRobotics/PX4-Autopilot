@@ -282,6 +282,7 @@ private:
 	uint8_t _formic_role{FORMIC_EKF_INSTANCE};
 	uint8_t _formic_override{INVALID_INSTANCE};       ///< ekf2 select_instance in FORMIC_EST_MODE 1 (bench)
 	uint32_t _formic_handover_count{0};
+	float _formic_unaided_offset{0.f};                 ///< added to the primary's anchored unaided heading, rad
 	bool _formic_backstop_warned{false};
 
 	bool _formic_seed_pending{false};

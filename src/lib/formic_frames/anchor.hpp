@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include <cmath>
+
 #include <matrix/math.hpp>
 
 namespace formic_frames
@@ -74,6 +76,28 @@ struct Anchor {
 		return a;
 	}
 };
+
+/**
+ * Offset added to the new instance's anchored unaided heading after a handover, so that the published
+ * heading - unaided_heading changes only by the announced heading reset. The stick yaw (StickYaw) takes any
+ * other change of it for a converging yaw estimate and turns the yaw setpoint by it.
+ * @param pub_heading, pub_unaided    published heading and unaided heading before the handover, rad
+ * @param inst_heading, inst_unaided  the new instance's own heading and unaided heading, rad
+ * @param announced_delta             heading reset announced with the handover, rad (0 when none)
+ * @return the offset, rad; 0 when a value is not finite
+ */
+inline float unaided_offset(float pub_heading, float pub_unaided, float inst_heading, float inst_unaided,
+			    float announced_delta)
+{
+	if (!std::isfinite(pub_heading) || !std::isfinite(pub_unaided) || !std::isfinite(inst_heading)
+	    || !std::isfinite(inst_unaided)) {
+		return 0.f;
+	}
+
+	// published after: heading_pub' - unaided_pub' = (pub_heading - pub_unaided) + announced_delta, where both
+	// primes carry the same anchor rotation, so the rotation cancels
+	return matrix::wrap_pi((inst_heading - inst_unaided) - (pub_heading - pub_unaided) - announced_delta);
+}
 
 /**
  * The tilt between two attitudes: the north and east parts of the rotation vector of

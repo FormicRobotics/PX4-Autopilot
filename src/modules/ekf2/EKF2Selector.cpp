@@ -1191,6 +1191,14 @@ void EKF2Selector::FormicHandover(uint8_t new_instance, bool requested, uint32_t
 	_formic_ramp_dtheta = d_theta;
 	_formic_ramp_t0 = att.timestamp_sample;
 
+	// the instances' heading - unaided_heading differ (EKF2: its yaw corrections since boot, VIO: 0); without the
+	// offset the stick yaw turns the yaw setpoint by that difference at every handover
+	if (_local_position_last.timestamp != 0) {
+		_formic_unaided_offset = formic_frames::unaided_offset(_local_position_last.heading,
+					 _local_position_last.unaided_heading, lpos.heading, lpos.unaided_heading,
+					 (have_pub && snap_back) ? step.delta_heading : 0.f);
+	}
+
 	// take the new instance's own reset counters as they are now
 	_formic_att_baseline = false;
 	_formic_lpos_baseline = false;
@@ -1350,7 +1358,7 @@ void EKF2Selector::FormicPublishVehicleLocalPosition()
 	lpos.ay = a(1);
 	lpos.az = a(2);
 	lpos.heading = anchor.applyHeading(lpos.heading);
-	lpos.unaided_heading = anchor.applyHeading(lpos.unaided_heading);
+	lpos.unaided_heading = matrix::wrap_pi(anchor.applyHeading(lpos.unaided_heading) + _formic_unaided_offset);
 
 	lpos.xy_reset_counter = _xy_reset_counter;
 	lpos.z_reset_counter = _z_reset_counter;

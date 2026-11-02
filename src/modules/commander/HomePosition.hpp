@@ -101,6 +101,9 @@ private:
 	uORB::PublicationData<home_position_s>			_home_position_pub{ORB_ID(home_position)};
 
 	uint8_t							_heading_reset_counter{0};
+	uint8_t							_xy_reset_counter{0};
+	uint8_t							_z_reset_counter{0};
+	bool							_formic_mode{false}; ///< FORMIC_EST_MODE 1 at boot
 	bool							_valid{false};
 	const failsafe_flags_s					&_failsafe_flags;
 	bool							_gps_position_for_home_valid{false};

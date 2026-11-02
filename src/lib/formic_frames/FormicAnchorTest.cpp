@@ -220,3 +220,43 @@ TEST(FormicPoseHistory, InterpolatesAndExtrapolates)
 	h.push(old);
 	EXPECT_EQ(h.newest().time_us, 1110000u);
 }
+
+// VIO -> EKF2 with a new anchor: the published heading - unaided_heading stays where it was (0 for the VIO), although
+// EKF2's own differs by 1.2 rad. EKF2 -> VIO with a snap back of 0.3 rad: it changes by exactly the announced reset.
+TEST(FormicUnaidedOffset, PublishedDifferenceChangesOnlyByTheAnnouncedReset)
+{
+	// before: the VIO instance is published, heading = unaided = 0.5 rad
+	const float pub_heading = 0.5f;
+	const float pub_unaided = 0.5f;
+
+	// EKF2: heading 1.0 rad, gyro-only heading -0.2 rad; the new anchor keeps the published heading
+	const float ekf_heading = 1.f;
+	const float ekf_unaided = -0.2f;
+	const Anchor ekf_anchor{matrix::wrap_pi(pub_heading - ekf_heading), {}};
+	const float offset = formic_frames::unaided_offset(pub_heading, pub_unaided, ekf_heading, ekf_unaided, 0.f);
+	const float heading_after = ekf_anchor.applyHeading(ekf_heading);
+	const float unaided_after = matrix::wrap_pi(ekf_anchor.applyHeading(ekf_unaided) + offset);
+	EXPECT_NEAR(heading_after, pub_heading, kTolerance);
+	EXPECT_NEAR(matrix::wrap_pi(heading_after - unaided_after), 0.f, kTolerance);
+
+	// back to the VIO (heading = unaided = 2.0 rad in its own frame) with a heading reset of 0.3 rad announced
+	const float vio_heading = 2.f;
+	const float delta = 0.3f;
+	const Anchor vio_anchor{matrix::wrap_pi(heading_after + delta - vio_heading), {}};
+	const float offset2 = formic_frames::unaided_offset(heading_after, unaided_after, vio_heading, vio_heading, delta);
+	const float heading_back = vio_anchor.applyHeading(vio_heading);
+	const float unaided_back = matrix::wrap_pi(vio_anchor.applyHeading(vio_heading) + offset2);
+	EXPECT_NEAR(matrix::wrap_pi(heading_back - heading_after), delta, kTolerance);
+	EXPECT_NEAR(matrix::wrap_pi(heading_back - unaided_back), delta, kTolerance);
+	// the unaided heading itself stays continuous, as EKF2's own gyro-only heading does through a reset
+	EXPECT_NEAR(matrix::wrap_pi(unaided_back - unaided_after), 0.f, kTolerance);
+}
+
+// The offset wraps into [-pi, pi], and a missing value gives no offset.
+TEST(FormicUnaidedOffset, WrapsAndIgnoresNan)
+{
+	const float offset = formic_frames::unaided_offset(0.f, 0.f, 3.f, -3.f, 0.f);
+	EXPECT_NEAR(offset, static_cast<float>(6.0 - 2.0 * M_PI), kTolerance);
+	EXPECT_EQ(formic_frames::unaided_offset(0.f, NAN, 1.f, 0.f, 0.f), 0.f);
+	EXPECT_EQ(formic_frames::unaided_offset(0.f, 0.f, 1.f, NAN, 0.f), 0.f);
+}
