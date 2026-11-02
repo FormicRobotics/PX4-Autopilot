@@ -90,6 +90,20 @@ public:
 			_position_setpoint_locked = pos;
 		}
 	}
+	/**
+	 * The position frame moved by `delta` (a reset that is a frame shift, not a correction of the estimate):
+	 * the trajectory, the tracked estimate and a locked setpoint move with it, so the error stays as it was.
+	 */
+	void shiftPosition(const float delta)
+	{
+		_state.x += delta;
+		_trajectory.setCurrentPosition(_state.x);
+		_position_estimate += delta;
+
+		if (_position_lock_active) {
+			_position_setpoint_locked += delta;
+		}
+	}
 	float getCurrentPosition() const { return _position_setpoint_locked; }
 	void setCurrentPositionEstimate(float pos) { _position_estimate = pos; }
 

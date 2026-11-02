@@ -71,13 +71,19 @@ bool FormicAltitude::activate(const trajectory_setpoint_s &last_setpoint)
 
 void FormicAltitude::_ekfResetHandlerPositionZ(float delta_z)
  {
-	 _smoothing.setCurrentPosition(_position(2));
+	 // FORMIC_EST_MODE 1: a handover can step the height (back to the VIO frame). The held height
+	 // moves with it (smoother and lock), so the drone does not climb or sink by the step.
+	 if (_formic_vio_mode && PX4_ISFINITE(delta_z)) {
+		 _smoothing.shiftPosition(delta_z);
 
-	 // FORMIC_EST_MODE 1: a handover can step the height (back to the VIO frame). A held height
-	 // moves with it, so the drone does not climb or sink by the step.
-	 if (_formic_vio_mode && PX4_ISFINITE(_position_setpoint(2)) && PX4_ISFINITE(delta_z)) {
-		 _position_setpoint(2) += delta_z;
+		 if (PX4_ISFINITE(_position_setpoint(2))) {
+			 _position_setpoint(2) += delta_z;
+		 }
+
+		 return;
 	 }
+
+	 _smoothing.setCurrentPosition(_position(2));
  }
 
 void FormicAltitude::_ekfResetHandlerVelocityZ(float delta_vz)
