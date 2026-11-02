@@ -367,6 +367,14 @@ then
 	camera_feedback start
 fi
 
+# Strobe-based camera timesync. In SITL the camera_trigger driver stands in
+# for the hardware strobe + camera_capture: its camera_trigger messages are
+# the edges camera_timesync matches the companion's camera_frame_stamp against.
+if param greater -s CAMTS_EN 0
+then
+	camera_timesync start
+fi
+
 if param compare -s IMU_GYRO_FFT_EN 1
 then
 	gyro_fft start

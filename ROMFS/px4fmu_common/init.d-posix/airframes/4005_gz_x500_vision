@@ -8,3 +8,14 @@
 PX4_SIM_MODEL=${PX4_SIM_MODEL:=x500_vision}
 
 . ${R}etc/init.d-posix/airframes/4001_gz_x500
+
+# Same camera-sync interface as the real vehicle: the camera_trigger driver
+# plays the strobe at the camera's 30 Hz (mono_cam update_rate), MAVLink
+# interface so no capture hardware is needed, and camera_timesync matches the
+# sim companion's camera_frame_stamp against those edges (CAMTS_EN gates the
+# module start in rcS; while locked the uXRCE-DDS client applies its offset).
+param set-default TRIG_MODE 2
+param set-default TRIG_INTERFACE 3
+param set-default TRIG_INTERVAL 33.33
+param set-default TRIG_ACT_TIME 10
+param set-default CAMTS_EN 1

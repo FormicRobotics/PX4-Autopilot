@@ -1,7 +1,7 @@
 menuconfig MODULES_CAMERA_TIMESYNC
 	bool "camera_timesync"
 	default n
-	depends on DRIVERS_CAMERA_CAPTURE
+	depends on DRIVERS_CAMERA_CAPTURE || DRIVERS_CAMERA_TRIGGER
 	---help---
 		Strobe-based clock sync: matches companion camera frame stamps
 		(camera_frame_stamp) with the camera_capture strobe edges
