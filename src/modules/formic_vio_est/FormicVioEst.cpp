@@ -666,6 +666,8 @@ void FormicVioEst::publishStatus(hrt_abstime now)
 	s.epoch = _segment.epoch();
 	s.segment = _segment.id();
 	s.epoch_changes = _segment.epochChanges();
+	s.epoch_anchor_yaw = _segment.epochAnchor().psi;
+	_segment.epochAnchor().t.copyTo(s.epoch_anchor_shift);
 	if (_last_accepted_sample_us == 0) {
 		s.sample_age_us = UINT32_MAX;
 

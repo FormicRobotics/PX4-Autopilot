@@ -23,6 +23,8 @@ uint8 VIO_STATUS_UNKNOWN = 7
 uint64 epoch				# VIO epoch (restart counter) of the newest accepted pose
 uint32 segment				# VIO segment: changes when the output frame is not continuous (after a long gap)
 uint32 epoch_changes			# VIO restarts anchored onto the output within the segment
+float32 epoch_anchor_yaw		# map from the current epoch's frame to the segment frame: rotation about down (rad); 0 while epoch_changes is 0
+float32[3] epoch_anchor_shift		# and shift, applied after the rotation: p_seg = Rz(yaw) * p_epoch + shift (m, NED); 0 while epoch_changes is 0
 
 uint32 sample_age_us			# age of the newest accepted pose now
 uint32 latency_us			# age of the newest pose when it arrived

@@ -289,3 +289,40 @@ TEST(FormicVioSegment, EpochsAndGaps)
 	seg.end();
 	EXPECT_EQ(seg.classify(2, t2 + 633000, gap_max), SegmentAction::NEW_SEGMENT);
 }
+
+// The epoch anchor published in formic_vio_est_status (epoch_anchor_yaw, epoch_anchor_shift): the identity until
+// a restart within the segment, then the map p_seg = Rz(yaw) * p_epoch + shift of the newest epoch, and the
+// identity again in a new segment.
+TEST(FormicVioSegment, EpochAnchorValues)
+{
+	VioSegment seg;
+	EXPECT_EQ(seg.epochAnchor().psi, 0.f);
+	EXPECT_EQ(seg.epochAnchor().t.norm(), 0.f);
+
+	seg.startSegment(1, kStartUs);
+	EXPECT_EQ(seg.epochChanges(), 0u);
+	EXPECT_EQ(seg.epochAnchor().psi, 0.f);
+	EXPECT_EQ(seg.epochAnchor().t.norm(), 0.f);
+
+	// first restart: output yaw 1 rad at (5, 1, -2), new epoch yaw -0.5 rad at (2, 0, 0)
+	const Vector3f p_out(5.f, 1.f, -2.f);
+	const Vector3f p_new(2.f, 0.f, 0.f);
+	seg.anchorEpoch(2, kStartUs + 100000, Quatf(Eulerf{0.f, 0.f, 1.f}), p_out, Quatf(Eulerf{0.f, 0.f, -0.5f}), p_new);
+	EXPECT_EQ(seg.epochChanges(), 1u);
+	EXPECT_NEAR(seg.epochAnchor().psi, 1.5f, 1e-5f);
+	const Vector3f shift_expected(5.f - 2.f * cosf(1.5f), 1.f - 2.f * sinf(1.5f), -2.f);
+	EXPECT_LT((seg.epochAnchor().t - shift_expected).norm(), 1e-5f);
+
+	// second restart: the anchor maps the newest epoch, not the one before; the yaw wraps into [-pi, pi]
+	const Vector3f p_out2(1.f, 2.f, -3.f);
+	seg.anchorEpoch(3, kStartUs + 200000, Quatf(Eulerf{0.f, 0.f, 3.f}), p_out2, Quatf(Eulerf{0.f, 0.f, -3.f}),
+			Vector3f(0.f, 0.f, 0.f));
+	EXPECT_EQ(seg.epochChanges(), 2u);
+	EXPECT_NEAR(seg.epochAnchor().psi, static_cast<float>(6.0 - 2.0 * M_PI), 1e-4f);
+	EXPECT_LT((seg.epochAnchor().t - p_out2).norm(), 1e-5f);
+
+	// a new segment is in its epoch's frame
+	seg.startSegment(3, kStartUs + 900000);
+	EXPECT_EQ(seg.epochAnchor().psi, 0.f);
+	EXPECT_EQ(seg.epochAnchor().t.norm(), 0.f);
+}
