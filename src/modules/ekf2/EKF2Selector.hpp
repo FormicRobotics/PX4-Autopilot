@@ -55,11 +55,13 @@
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/vehicle_odometry.h>
 #include <uORB/topics/wind.h>
+#include <uORB/topics/formic_control_state.h>
 #include <uORB/topics/formic_ekf_vel_reset.h>
 #include <uORB/topics/formic_pos_req.h>
 #include <uORB/topics/formic_vio_est_status.h>
 
 #include <lib/formic_frames/anchor.hpp>
+#include <lib/formic_frames/control_state.hpp>
 #include <lib/formic_frames/pose_history.hpp>
 
 #if CONSTRAINED_MEMORY
@@ -96,6 +98,9 @@ private:
 	void PublishVehicleGlobalPosition();
 	void PublishVehicleOdometry();
 	void PublishWindEstimate();
+
+	/// Publishes formic_control_state from `lpos`, the vehicle_local_position just published, and the last vehicle_attitude.
+	void PublishControlState(const vehicle_local_position_s &lpos);
 
 	bool SelectInstance(uint8_t instance);
 
@@ -223,6 +228,7 @@ private:
 
 	// vehicle_attitude: reset counters
 	vehicle_attitude_s _attitude_last{};
+	vehicle_attitude_s _attitude_published{};  ///< the last vehicle_attitude as published, for formic_control_state
 	matrix::Quatf _delta_q_reset{};
 	uint8_t _quat_reset_counter{0};
 
@@ -302,6 +308,7 @@ private:
 	uORB::Subscription _formic_pos_req_sub{ORB_ID(formic_pos_req)};
 	uORB::Subscription _formic_vio_est_status_sub{ORB_ID(formic_vio_est_status)};
 	uORB::Publication<formic_ekf_vel_reset_s> _formic_ekf_vel_reset_pub{ORB_ID(formic_ekf_vel_reset)};
+	uORB::Publication<formic_control_state_s> _formic_control_state_pub{ORB_ID(formic_control_state)};
 
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	uORB::Subscription _sensors_status_imu{ORB_ID(sensors_status_imu)};

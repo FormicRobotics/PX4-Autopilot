@@ -419,6 +419,7 @@ void EKF2Selector::PublishVehicleAttitude()
 
 			attitude.timestamp = hrt_absolute_time();
 			_vehicle_attitude_pub.publish(attitude);
+			_attitude_published = attitude;
 		}
 	}
 }
@@ -546,6 +547,7 @@ void EKF2Selector::PublishVehicleLocalPosition()
 
 			local_position.timestamp = hrt_absolute_time();
 			_vehicle_local_position_pub.publish(local_position);
+			PublishControlState(local_position);
 		}
 	}
 }
@@ -595,6 +597,18 @@ void EKF2Selector::PublishVehicleOdometry()
 			_vehicle_odometry_pub.publish(odometry);
 		}
 	}
+}
+
+void EKF2Selector::PublishControlState(const vehicle_local_position_s &lpos)
+{
+	if (_attitude_published.timestamp == 0) {
+		return;
+	}
+
+	formic_control_state_s state = formic_frames::control_state_from(lpos, _attitude_published, _selected_instance,
+				       _formic_mode ? _formic_handover_count : _instance_changed_count, _formic_ramp_active);
+	state.timestamp = lpos.timestamp;
+	_formic_control_state_pub.publish(state);
 }
 
 void EKF2Selector::PublishVehicleGlobalPosition()
@@ -1251,6 +1265,7 @@ void EKF2Selector::FormicPublishVehicleAttitude()
 	attitude.timestamp = hrt_absolute_time();
 	_vehicle_attitude_pub.publish(attitude);
 	_attitude_last = attitude;
+	_attitude_published = attitude;
 
 	formic_frames::PoseSample s;
 	s.time_us = attitude.timestamp_sample;
@@ -1354,6 +1369,7 @@ void EKF2Selector::FormicPublishVehicleLocalPosition()
 	lpos.timestamp = hrt_absolute_time();
 	_vehicle_local_position_pub.publish(lpos);
 	_local_position_last = lpos;
+	PublishControlState(lpos);
 
 	formic_frames::PoseSample s;
 	s.time_us = lpos.timestamp_sample;

@@ -278,6 +278,7 @@ set(msg_files
 	versioned/Wind.msg
 	DdsFlag.msg
 	TotalArmTime.msg
+	FormicControlState.msg
 	FormicEvFlag.msg
 	FormicEkfVelReset.msg
 	FormicPosReq.msg

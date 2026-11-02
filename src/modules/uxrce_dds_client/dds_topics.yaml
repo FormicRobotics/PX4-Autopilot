@@ -157,6 +157,10 @@ publications:
   type: px4_msgs::msg::EstimatorSelectorStatus
   rate_limit: 10
 
+# The state the controllers use and the estimator instance it came from, at every local position update
+- topic: /fmu/out/formic_control_state
+  type: px4_msgs::msg::FormicControlState
+
 - topic: /fmu/out/manual_control_switches
   type: px4_msgs::msg::ManualControlSwitches
   rate_limit: 50
