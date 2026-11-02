@@ -427,6 +427,10 @@ void CameraTimesync::check_counters(const camera_frame_stamp_s &frame, const Str
 
 void CameraTimesync::lock_from_samples()
 {
+	if (_lock_sample_count == 0 || _lock_sample_count > MAX_LOCK_SAMPLES) {
+		return;
+	}
+
 	int64_t sorted[MAX_LOCK_SAMPLES];
 
 	for (unsigned i = 0; i < _lock_sample_count; i++) {
