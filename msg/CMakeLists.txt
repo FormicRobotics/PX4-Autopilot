@@ -276,8 +276,8 @@ set(msg_files
 	versioned/VehicleStatus.msg
 	versioned/VtolVehicleStatus.msg
 	versioned/Wind.msg
-	ddsFlag.msg
-	totalArmTime.msg
+	DdsFlag.msg
+	TotalArmTime.msg
 	FormicEvFlag.msg
 	FormicEkfVelReset.msg
 	FormicPosReq.msg
