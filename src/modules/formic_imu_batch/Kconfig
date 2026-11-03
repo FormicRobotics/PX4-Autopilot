@@ -1,0 +1,5 @@
+menuconfig MODULES_FORMIC_IMU_BATCH
+	bool "formic imu batch"
+	default n
+	---help---
+		Every FIFO sample of the IMU EKF2 flies on, packed in batches for the Jetson.
