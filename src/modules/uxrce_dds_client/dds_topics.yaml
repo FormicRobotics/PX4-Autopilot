@@ -87,13 +87,12 @@ publications:
   type: px4_msgs::msg::Wind
   rate_limit: 1
 
-- topic: /fmu/out/sensor_accel
-  type: px4_msgs::msg::SensorAccel
-  rate_limit: 200
+# every FIFO sample of the IMU EKF2 flies on, up to 32 per message (formic_imu_batch); about 50 Hz each
+- topic: /fmu/out/formic_gyro_batch
+  type: px4_msgs::msg::FormicImuBatch
 
-- topic: /fmu/out/sensor_gyro
-  type: px4_msgs::msg::SensorGyro
-  rate_limit: 200
+- topic: /fmu/out/formic_accel_batch
+  type: px4_msgs::msg::FormicImuBatch
 
 - topic: /fmu/out/vehicle_command
   type: px4_msgs::msg::VehicleCommand

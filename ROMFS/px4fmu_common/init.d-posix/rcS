@@ -287,6 +287,9 @@ then
 	attitude_estimator_q start
 fi
 
+# Every FIFO sample of the IMU EKF2 flies on, in batches for the Jetson.
+formic_imu_batch start
+
 # Formic estimator modules for the design FORMIC_EST_MODE picks.
 # 0: the EV watchdog. Always started; it self-gates on FORMIC_WDEV_EN (idles when 0),
 #    so the parameter can be toggled at runtime without changing the startup script.
