@@ -46,6 +46,10 @@ private:
 	/// Follows sensor_selection: the FIFO instances of the gyro and accel in use.
 	void updateSelection();
 
+	/// FIFO messages uORB dropped before this module read them (its queue overflowed): the jumps in the
+	/// subscription's generation. The first read after a change of instance is not counted.
+	static void countOverflow(unsigned generation_before, unsigned generation_after, bool &first, uint32_t &overflow);
+
 	/// The FIFO instance whose device_id is `device_id`, or NONE.
 	template<typename T>
 	static int findInstance(uORB::SubscriptionCallbackWorkItem (&subs)[MAX_INSTANCES], uint32_t device_id);
@@ -77,6 +81,16 @@ private:
 	int _gyro_instance{NONE};
 	int _accel_instance{NONE};
 	hrt_abstime _last_selection_check{0};
+
+	bool _gyro_first_read{true};
+	bool _accel_first_read{true};
+	uint32_t _gyro_queue_overflow{0};
+	uint32_t _accel_queue_overflow{0};
+
+	// read buffers: kept off the work queue's stack
+	sensor_gyro_fifo_s _gyro_fifo{};
+	sensor_accel_fifo_s _accel_fifo{};
+	formic_imu_batch_s _out{};
 
 	perf_counter_t _cycle_perf{perf_alloc(PC_ELAPSED, MODULE_NAME": cycle")};
 };

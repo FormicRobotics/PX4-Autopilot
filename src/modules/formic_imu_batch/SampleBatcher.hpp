@@ -9,6 +9,9 @@
  * A batch is emitted when it is full, and before a sample that cannot join it: another device or
  * scale, a time offset beyond uint16, or a time not after the previous sample's.
  *
+ * A gap of more than 1.5 dt to the previous sample counts the samples missing in it; each batch
+ * carries the count so far in samples_lost.
+ *
  * No uORB: tested with gtest.
  ****************************************************************************/
 
@@ -46,6 +49,14 @@ public:
 				continue;
 			}
 
+			if ((_last_sample_us != 0) && (dt_us > 0.f)) {
+				const float gap = static_cast<float>(t - _last_sample_us);
+
+				if (gap > 1.5f * dt_us) {
+					_lost += static_cast<uint32_t>(lroundf(gap / dt_us)) - 1;
+				}
+			}
+
 			if (_batch.samples > 0
 			    && (device_id != _batch.device_id || fabsf(scale - _batch.scale) > 1e-6f * fabsf(_batch.scale)
 				|| (t - _batch.timestamp_sample) > UINT16_MAX)) {
@@ -78,7 +89,10 @@ public:
 	/// Samples emitted so far.
 	uint64_t emitted() const { return _emitted; }
 
-	/// Drops a partly filled batch and the time history (another sensor was selected).
+	/// Samples missing between the samples added, found by their times.
+	uint32_t lost() const { return _lost; }
+
+	/// Drops a partly filled batch and the time history (another sensor was selected); the counts stay.
 	void reset()
 	{
 		_batch = formic_imu_batch_s{};
@@ -89,6 +103,7 @@ private:
 	template<typename Emit>
 	void emitBatch(Emit &&emit)
 	{
+		_batch.samples_lost = _lost;
 		emit(static_cast<const formic_imu_batch_s &>(_batch));
 		_emitted += _batch.samples;
 		_batch = formic_imu_batch_s{};
@@ -97,6 +112,7 @@ private:
 	formic_imu_batch_s _batch{};
 	uint64_t _last_sample_us{0};
 	uint32_t _dropped{0};
+	uint32_t _lost{0};
 	uint64_t _emitted{0};
 };
 

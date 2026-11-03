@@ -67,6 +67,7 @@ void FormicImuBatch::updateSelection()
 		if (i != NONE) {
 			_gyro_fifo_sub[i].registerCallback();
 			_gyro_batcher.reset();
+			_gyro_first_read = true;
 			_gyro_instance = i;
 			PX4_INFO("gyro %" PRIu32 ": sensor_gyro_fifo instance %d", _gyro_device_id, i);
 		}
@@ -82,10 +83,21 @@ void FormicImuBatch::updateSelection()
 		if (i != NONE) {
 			_accel_fifo_sub[i].registerCallback();
 			_accel_batcher.reset();
+			_accel_first_read = true;
 			_accel_instance = i;
 			PX4_INFO("accel %" PRIu32 ": sensor_accel_fifo instance %d", _accel_device_id, i);
 		}
 	}
+}
+
+void FormicImuBatch::countOverflow(unsigned generation_before, unsigned generation_after, bool &first,
+				   uint32_t &overflow)
+{
+	if (!first && (generation_after - generation_before > 1)) {
+		overflow += generation_after - generation_before - 1;
+	}
+
+	first = false;
 }
 
 void FormicImuBatch::Run()
@@ -107,27 +119,33 @@ void FormicImuBatch::Run()
 
 	// drain every queued FIFO message, so no sample is skipped while this item was late
 	if (_gyro_instance != NONE) {
-		sensor_gyro_fifo_s fifo;
+		uORB::SubscriptionCallbackWorkItem &sub = _gyro_fifo_sub[_gyro_instance];
+		unsigned generation = sub.get_last_generation();
 
-		while (_gyro_fifo_sub[_gyro_instance].update(&fifo)) {
-			_gyro_batcher.add(fifo.timestamp_sample, fifo.dt, fifo.device_id, fifo.scale, fifo.samples, fifo.x, fifo.y,
-					  fifo.z, [this](const formic_imu_batch_s & batch) {
-				formic_imu_batch_s out = batch;
-				out.timestamp = hrt_absolute_time();
-				_gyro_batch_pub.publish(out);
+		while (sub.update(&_gyro_fifo)) {
+			countOverflow(generation, sub.get_last_generation(), _gyro_first_read, _gyro_queue_overflow);
+			generation = sub.get_last_generation();
+			_gyro_batcher.add(_gyro_fifo.timestamp_sample, _gyro_fifo.dt, _gyro_fifo.device_id, _gyro_fifo.scale,
+					  _gyro_fifo.samples, _gyro_fifo.x, _gyro_fifo.y, _gyro_fifo.z, [this](const formic_imu_batch_s & batch) {
+				_out = batch;
+				_out.timestamp = hrt_absolute_time();
+				_gyro_batch_pub.publish(_out);
 			});
 		}
 	}
 
 	if (_accel_instance != NONE) {
-		sensor_accel_fifo_s fifo;
+		uORB::SubscriptionCallbackWorkItem &sub = _accel_fifo_sub[_accel_instance];
+		unsigned generation = sub.get_last_generation();
 
-		while (_accel_fifo_sub[_accel_instance].update(&fifo)) {
-			_accel_batcher.add(fifo.timestamp_sample, fifo.dt, fifo.device_id, fifo.scale, fifo.samples, fifo.x, fifo.y,
-					   fifo.z, [this](const formic_imu_batch_s & batch) {
-				formic_imu_batch_s out = batch;
-				out.timestamp = hrt_absolute_time();
-				_accel_batch_pub.publish(out);
+		while (sub.update(&_accel_fifo)) {
+			countOverflow(generation, sub.get_last_generation(), _accel_first_read, _accel_queue_overflow);
+			generation = sub.get_last_generation();
+			_accel_batcher.add(_accel_fifo.timestamp_sample, _accel_fifo.dt, _accel_fifo.device_id, _accel_fifo.scale,
+					   _accel_fifo.samples, _accel_fifo.x, _accel_fifo.y, _accel_fifo.z, [this](const formic_imu_batch_s & batch) {
+				_out = batch;
+				_out.timestamp = hrt_absolute_time();
+				_accel_batch_pub.publish(_out);
 			});
 		}
 	}
@@ -137,10 +155,14 @@ void FormicImuBatch::Run()
 
 int FormicImuBatch::print_status()
 {
-	PX4_INFO("gyro %" PRIu32 " (sensor_gyro_fifo instance %d): %" PRIu64 " samples sent, %" PRIu32 " dropped",
-		 _gyro_device_id, _gyro_instance, _gyro_batcher.emitted(), _gyro_batcher.dropped());
-	PX4_INFO("accel %" PRIu32 " (sensor_accel_fifo instance %d): %" PRIu64 " samples sent, %" PRIu32 " dropped",
-		 _accel_device_id, _accel_instance, _accel_batcher.emitted(), _accel_batcher.dropped());
+	PX4_INFO("gyro %" PRIu32 " (sensor_gyro_fifo instance %d): %" PRIu64 " samples sent, %" PRIu32
+		 " missing by time, %" PRIu32 " messages lost to the queue, %" PRIu32 " out of order",
+		 _gyro_device_id, _gyro_instance, _gyro_batcher.emitted(), _gyro_batcher.lost(), _gyro_queue_overflow,
+		 _gyro_batcher.dropped());
+	PX4_INFO("accel %" PRIu32 " (sensor_accel_fifo instance %d): %" PRIu64 " samples sent, %" PRIu32
+		 " missing by time, %" PRIu32 " messages lost to the queue, %" PRIu32 " out of order",
+		 _accel_device_id, _accel_instance, _accel_batcher.emitted(), _accel_batcher.lost(), _accel_queue_overflow,
+		 _accel_batcher.dropped());
 	perf_print_counter(_cycle_perf);
 	return 0;
 }

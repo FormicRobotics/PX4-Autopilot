@@ -96,6 +96,50 @@ TEST(FormicImuBatch, ALostMessageShowsAsAGap)
 	ASSERT_EQ(sink.batches.size(), 1u);
 	EXPECT_EQ(sink.batches[0].dt[9], 9 * 625);
 	EXPECT_EQ(sink.batches[0].dt[10], 11 * 625);
+	EXPECT_EQ(batcher.lost(), 1u);
+	EXPECT_EQ(sink.batches[0].samples_lost, 1u);
+}
+
+// The BMI270 delivers every 630 us while the driver reports the nominal 625 us: a steady stream counts
+// nothing as missing, a gap of two or four intervals counts one or three; the count is cumulative.
+TEST(FormicImuBatch, MissingSamplesAreCountedByTime)
+{
+	SampleBatcher batcher;
+	Sink sink;
+	constexpr uint64_t kRealDtUs = 630;
+	uint64_t t = kStartUs;
+
+	for (int i = 0; i < 32; i++) {
+		addMessage(batcher, sink, t, 1, static_cast<int16_t>(i));
+		t += kRealDtUs;
+	}
+
+	ASSERT_EQ(sink.batches.size(), 1u);
+	EXPECT_EQ(sink.batches[0].samples_lost, 0u);
+
+	t += kRealDtUs;			// one missing
+	addMessage(batcher, sink, t, 1, 100);
+	t += 4 * kRealDtUs;		// three missing
+
+	for (int i = 0; i < 31; i++) {
+		addMessage(batcher, sink, t, 1, static_cast<int16_t>(101 + i));
+		t += kRealDtUs;
+	}
+
+	ASSERT_EQ(sink.batches.size(), 2u);
+	EXPECT_EQ(sink.batches[1].samples_lost, 4u);
+	EXPECT_EQ(batcher.lost(), 4u);
+}
+
+// A new sensor starts without a time history: the jump to its first sample is not counted.
+TEST(FormicImuBatch, ResetForgetsTheLastSampleTime)
+{
+	SampleBatcher batcher;
+	Sink sink;
+	addMessage(batcher, sink, kStartUs, 1, 1);
+	batcher.reset();
+	addMessage(batcher, sink, kStartUs + 10'000, 1, 2);
+	EXPECT_EQ(batcher.lost(), 0u);
 }
 
 // A repeated or older sample is dropped and counted.

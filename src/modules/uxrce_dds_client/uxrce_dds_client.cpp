@@ -44,6 +44,9 @@
 #include <uxr/client/util/ping.h>
 #include <ucdr/microcdr.h>
 
+// in Micro-XRCE-DDS-Client's ping.c, not in its public headers
+extern "C" bool serialize_get_info_message(ucdrBuffer *ub, const uint8_t session_id);
+
 #include <termios.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -543,9 +546,17 @@ void UxrceddsClient::checkConnectivity(uxrSession *session)
 				++_num_pings_missed;
 			}
 
-			int timeout_ms = 1'000; // 1 second
-			uint8_t attempts = 1;
-			uxr_ping_agent_session(session, timeout_ms, attempts);
+			// Send the ping without waiting for the reply: the main loop reads the reply into
+			// session->on_pong_flag. uxr_ping_agent_session() would wait for it up to its timeout and
+			// send no topic meanwhile.
+			uint8_t ping_buffer[UXR_PING_BUF];
+			ucdrBuffer ub;
+			ucdr_init_buffer(&ub, ping_buffer, sizeof(ping_buffer));
+			session->on_pong_flag = NO_PONG_STATUS;
+
+			if (serialize_get_info_message(&ub, session->info.id)) {
+				session->comm->send_msg(session->comm->instance, ping_buffer, ucdr_buffer_length(&ub));
+			}
 
 			_had_ping_reply = false;
 		}

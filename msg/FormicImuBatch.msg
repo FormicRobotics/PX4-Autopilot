@@ -12,6 +12,8 @@ float32 scale			# value = raw * scale: rad/s (gyro) or m/s^2 (accel)
 uint8 samples			# number of valid samples
 uint8 MAX_SAMPLES = 32
 
+uint32 samples_lost		# samples of this sensor missing on the FMU since the module started, found by sample time (cumulative); a gap beyond its step since the previous message was lost on the link
+
 uint16[32] dt			# sample time of each sample after timestamp_sample (microseconds); a gap of more than one sample interval means samples were lost
 
 int16[32] x			# FRD board frame X-axis
