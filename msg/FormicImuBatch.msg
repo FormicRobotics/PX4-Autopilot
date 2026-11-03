@@ -1,6 +1,6 @@
 # A batch of raw samples of one sensor of the IMU EKF2 flies on (sensor_selection), every sample
-# of the driver's FIFO, for the Jetson. Published by formic_imu_batch, which runs only while
-# FORMIC_IMU_BATCH is 1. Rotated into the FRD board frame by the driver, as sensor_*_fifo.
+# of the driver's FIFO, for the Jetson. Published by formic_imu_batch. Rotated into the FRD board frame
+# by the driver, as sensor_*_fifo.
 
 uint64 timestamp		# time of publication (microseconds)
 uint64 timestamp_sample		# sample time of the first sample (microseconds)
