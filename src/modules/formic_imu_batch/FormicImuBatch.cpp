@@ -169,12 +169,11 @@ void FormicImuBatch::Run()
 
 int FormicImuBatch::print_status()
 {
-	PX4_INFO("gyro %" PRIu32 " (sensor_gyro_fifo instance %d): %" PRIu64 " samples sent, %" PRIu32
-		 " missing by time, %" PRIu32 " messages lost to the queue, %" PRIu32 " out of order",
+	// short lines: PX4_INFO cuts a line at 128 characters
+	PX4_INFO("gyro  %" PRIu32 " fifo %d: sent %" PRIu64 ", missing %" PRIu32 ", queue lost %" PRIu32 ", out of order %" PRIu32,
 		 _gyro_device_id, _gyro_instance, _gyro_batcher.emitted(), _gyro_batcher.lost(), _gyro_queue_overflow,
 		 _gyro_batcher.dropped());
-	PX4_INFO("accel %" PRIu32 " (sensor_accel_fifo instance %d): %" PRIu64 " samples sent, %" PRIu32
-		 " missing by time, %" PRIu32 " messages lost to the queue, %" PRIu32 " out of order",
+	PX4_INFO("accel %" PRIu32 " fifo %d: sent %" PRIu64 ", missing %" PRIu32 ", queue lost %" PRIu32 ", out of order %" PRIu32,
 		 _accel_device_id, _accel_instance, _accel_batcher.emitted(), _accel_batcher.lost(), _accel_queue_overflow,
 		 _accel_batcher.dropped());
 	perf_print_counter(_cycle_perf);
