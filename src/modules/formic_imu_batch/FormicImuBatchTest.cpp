@@ -180,3 +180,31 @@ TEST(FormicImuBatch, LongGapClosesTheBatch)
 	ASSERT_EQ(sink.batches.size(), 1u);
 	EXPECT_EQ(sink.batches[0].samples, 1);
 }
+
+// flush() emits a part-filled batch (the module closes the accel batch early to stagger it from the
+// gyro batch); the next sample starts a new batch.
+TEST(FormicImuBatch, FlushEmitsAPartBatch)
+{
+	SampleBatcher batcher;
+	Sink sink;
+
+	for (int i = 0; i < 16; i++) {
+		addMessage(batcher, sink, kStartUs + static_cast<uint64_t>(i * kDtUs), 1, static_cast<int16_t>(i));
+	}
+
+	EXPECT_EQ(batcher.pending(), 16);
+	batcher.flush(sink);
+	ASSERT_EQ(sink.batches.size(), 1u);
+	EXPECT_EQ(sink.batches[0].samples, 16);
+	EXPECT_EQ(batcher.pending(), 0);
+
+	batcher.flush(sink);
+	EXPECT_EQ(sink.batches.size(), 1u);
+
+	addMessage(batcher, sink, kStartUs + static_cast<uint64_t>(16 * kDtUs), 1, 16);
+	batcher.flush(sink);
+	ASSERT_EQ(sink.batches.size(), 2u);
+	EXPECT_EQ(sink.batches[1].timestamp_sample, kStartUs + static_cast<uint64_t>(16 * kDtUs));
+	EXPECT_EQ(batcher.emitted(), 17u);
+	EXPECT_EQ(batcher.lost(), 0u);
+}

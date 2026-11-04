@@ -46,6 +46,9 @@ private:
 	/// Follows sensor_selection: the FIFO instances of the gyro and accel in use.
 	void updateSelection();
 
+	/// Publishes a batch, stamped now.
+	void publish(uORB::Publication<formic_imu_batch_s> &pub, const formic_imu_batch_s &batch);
+
 	/// FIFO messages uORB dropped before this module read them (its queue overflowed): the jumps in the
 	/// subscription's generation. The first read after a change of instance is not counted.
 	static void countOverflow(unsigned generation_before, unsigned generation_after, bool &first, uint32_t &overflow);
@@ -81,6 +84,12 @@ private:
 	int _gyro_instance{NONE};
 	int _accel_instance{NONE};
 	hrt_abstime _last_selection_check{0};
+
+	// The gyro and accel batches would fill on the same sample and reach the link back to back. The
+	// accel batch is closed when the gyro batch is half full, so the two alternate every 16 samples.
+	static constexpr uint8_t STAGGER_SAMPLES{formic_imu_batch_s::MAX_SAMPLES / 2};
+	static constexpr uint8_t STAGGER_MIN_SAMPLES{8}; // a shorter accel batch is left to fill
+	bool _accel_stagger_armed{false};
 
 	bool _gyro_first_read{true};
 	bool _accel_first_read{true};

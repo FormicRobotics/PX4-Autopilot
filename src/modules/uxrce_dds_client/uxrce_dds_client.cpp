@@ -47,6 +47,20 @@
 // in Micro-XRCE-DDS-Client's ping.c, not in its public headers
 extern "C" bool serialize_get_info_message(ucdrBuffer *ub, const uint8_t session_id);
 
+// the serial transport's send_msg, wrapped to count the writes it cannot complete
+static send_msg_func serial_send_msg{nullptr};
+
+static bool send_msg_counting_failures(void *instance, const uint8_t *buf, size_t len)
+{
+	const bool sent = serial_send_msg(instance, buf, len);
+
+	if (!sent) {
+		transport_send_failures++;
+	}
+
+	return sent;
+}
+
 #include <termios.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -140,6 +154,9 @@ bool UxrceddsClient::init()
 
 			_comm = &_transport_serial->comm;
 			_fd = fd;
+
+			serial_send_msg = _comm->send_msg;
+			_comm->send_msg = send_msg_counting_failures;
 
 			return true;
 		}
@@ -1001,6 +1018,10 @@ int UxrceddsClient::print_status()
 	}
 
 	PX4_INFO("timesync converged: %s", _timesync.sync_converged() ? "true" : "false");
+
+	if (_subs) {
+		_subs->print_failures();
+	}
 
 	perf_print_counter(_loop_perf);
 	perf_print_counter(_loop_interval_perf);

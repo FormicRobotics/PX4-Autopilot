@@ -58,6 +58,10 @@ static constexpr uint32_t get_message_version() {
 	return MessageVersionHelper<T>::m;
 }
 
+// Writes the transport could not complete (a full UART TX buffer cuts the frame off; the agent drops it).
+// Counted by the client's wrapper around the transport's send_msg.
+static uint32_t transport_send_failures{0}; // dds_topics.h is included by uxrce_dds_client.cpp only
+
 struct SendSubscription {
 	const struct orb_metadata *orb_meta;
 	uxrObjectId data_writer;
@@ -89,7 +93,12 @@ struct SendTopicsSubs {
 
 	uint32_t num_payload_sent{};
 
+	// per topic since start: messages written, and those lost on the FC (no room in the stream or a failed write)
+	uint32_t num_written[@(len(publications))] {};
+	uint32_t num_failed[@(len(publications))] {};
+
 	bool init(uxrSession *session, uxrStreamId reliable_out_stream_id, uxrStreamId reliable_in_stream_id, uxrStreamId best_effort_in_stream_id, uxrObjectId participant_id, const char *client_namespace);
+	void print_failures() const;
 	void update(uxrSession *session, uxrStreamId reliable_out_stream_id, uxrStreamId best_effort_stream_id, uxrObjectId participant_id, const char *client_namespace);
 	void reset();
 };
@@ -110,6 +119,24 @@ bool SendTopicsSubs::init(uxrSession *session, uxrStreamId reliable_out_stream_i
 		}
 	}
 	return ret;
+}
+
+void SendTopicsSubs::print_failures() const {
+	uint32_t written = 0;
+	uint32_t failed = 0;
+
+	for (unsigned idx = 0; idx < sizeof(send_subscriptions)/sizeof(send_subscriptions[0]); ++idx) {
+		written += num_written[idx];
+		failed += num_failed[idx];
+	}
+
+	PX4_INFO("Messages lost on the FC: %" PRIu32 " of %" PRIu32 " (failed transport writes: %" PRIu32 ")", failed, written, transport_send_failures);
+
+	for (unsigned idx = 0; idx < sizeof(send_subscriptions)/sizeof(send_subscriptions[0]); ++idx) {
+		if (num_failed[idx] > 0) {
+			PX4_INFO("  %-36s %" PRIu32 " of %" PRIu32, send_subscriptions[idx].topic, num_failed[idx], num_written[idx]);
+		}
+	}
 }
 
 void SendTopicsSubs::reset() {
@@ -139,10 +166,19 @@ void SendTopicsSubs::update(uxrSession *session, uxrStreamId reliable_out_stream
 				if (uxr_prepare_output_stream(session, best_effort_stream_id, send_subscriptions[idx].data_writer, &ub, topic_size) != UXR_INVALID_REQUEST_ID) {
 					send_subscriptions[idx].ucdr_serialize_method(&topic_data, ub, time_offset_us);
 					// TODO: fill up the MTU and then flush, which reduces the packet overhead
+					// every topic is sent at once, so a failed write belongs to this topic
+					const uint32_t failures_before = transport_send_failures;
 					uxr_flash_output_streams(session);
 					num_payload_sent += topic_size;
+					num_written[idx]++;
+
+					if (transport_send_failures != failures_before) {
+						num_failed[idx]++;
+					}
 
 				} else {
+					num_written[idx]++;
+					num_failed[idx]++;
 					//PX4_ERR("Error uxr_prepare_output_stream UXR_INVALID_REQUEST_ID %s", send_subscriptions[idx].subscription.get_topic()->o_name);
 				}
 

@@ -28,10 +28,6 @@ publications:
   type: px4_msgs::msg::ManualControlSetpoint
   rate_limit: 25
 
-- topic: /fmu/out/position_setpoint_triplet
-  type: px4_msgs::msg::PositionSetpointTriplet
-  rate_limit: 5
-
   #- topic: /fmu/out/timesync_status
   # type: px4_msgs::msg::TimesyncStatus
   # rate_limit: 10
@@ -62,10 +58,6 @@ publications:
 - topic: /fmu/out/estimator_sensor_bias
   type: px4_msgs::msg::EstimatorSensorBias
   rate_limit: 5
-
-- topic: /fmu/out/vehicle_local_position
-  type: px4_msgs::msg::VehicleLocalPosition
-  rate_limit: 50
 
 - topic: /fmu/out/vehicle_odometry
   type: px4_msgs::msg::VehicleOdometry
@@ -116,10 +108,6 @@ publications:
 - topic: /fmu/out/estimator_aid_src_ev_yaw
   type: px4_msgs::msg::EstimatorAidSource1d
   rate_limit: 10
-
-- topic: /fmu/out/vehicle_local_position_setpoint
-  type: px4_msgs::msg::VehicleLocalPositionSetpoint
-  rate_limit: 50
 
 - topic: /fmu/out/formic/debug_flag
   type: px4_msgs::msg::DebugFlag

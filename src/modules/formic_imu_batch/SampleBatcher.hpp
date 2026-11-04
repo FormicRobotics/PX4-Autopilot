@@ -89,6 +89,18 @@ public:
 	/// Samples emitted so far.
 	uint64_t emitted() const { return _emitted; }
 
+	/// Samples in the batch not yet emitted.
+	uint8_t pending() const { return _batch.samples; }
+
+	/// Emits the batch now, if it holds any sample.
+	template<typename Emit>
+	void flush(Emit &&emit)
+	{
+		if (_batch.samples > 0) {
+			emitBatch(emit);
+		}
+	}
+
 	/// Samples missing between the samples added, found by their times.
 	uint32_t lost() const { return _lost; }
 

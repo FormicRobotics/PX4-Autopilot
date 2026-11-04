@@ -90,6 +90,13 @@ void FormicImuBatch::updateSelection()
 	}
 }
 
+void FormicImuBatch::publish(uORB::Publication<formic_imu_batch_s> &pub, const formic_imu_batch_s &batch)
+{
+	_out = batch;
+	_out.timestamp = hrt_absolute_time();
+	pub.publish(_out);
+}
+
 void FormicImuBatch::countOverflow(unsigned generation_before, unsigned generation_after, bool &first,
 				   uint32_t &overflow)
 {
@@ -127,9 +134,8 @@ void FormicImuBatch::Run()
 			generation = sub.get_last_generation();
 			_gyro_batcher.add(_gyro_fifo.timestamp_sample, _gyro_fifo.dt, _gyro_fifo.device_id, _gyro_fifo.scale,
 					  _gyro_fifo.samples, _gyro_fifo.x, _gyro_fifo.y, _gyro_fifo.z, [this](const formic_imu_batch_s & batch) {
-				_out = batch;
-				_out.timestamp = hrt_absolute_time();
-				_gyro_batch_pub.publish(_out);
+				publish(_gyro_batch_pub, batch);
+				_accel_stagger_armed = true;
 			});
 		}
 	}
@@ -143,9 +149,17 @@ void FormicImuBatch::Run()
 			generation = sub.get_last_generation();
 			_accel_batcher.add(_accel_fifo.timestamp_sample, _accel_fifo.dt, _accel_fifo.device_id, _accel_fifo.scale,
 					   _accel_fifo.samples, _accel_fifo.x, _accel_fifo.y, _accel_fifo.z, [this](const formic_imu_batch_s & batch) {
-				_out = batch;
-				_out.timestamp = hrt_absolute_time();
-				_accel_batch_pub.publish(_out);
+				publish(_accel_batch_pub, batch);
+			});
+		}
+	}
+
+	if (_accel_stagger_armed && (_gyro_batcher.pending() >= STAGGER_SAMPLES)) {
+		_accel_stagger_armed = false;
+
+		if (_accel_batcher.pending() >= STAGGER_MIN_SAMPLES) {
+			_accel_batcher.flush([this](const formic_imu_batch_s & batch) {
+				publish(_accel_batch_pub, batch);
 			});
 		}
 	}
