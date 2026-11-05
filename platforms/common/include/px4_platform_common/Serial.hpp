@@ -90,7 +90,16 @@ public:
 	bool setFlowcontrol(FlowControl flowcontrol);
 
 	bool getSingleWireMode() const;
-	bool setSingleWireMode();
+	/**
+	 * Enable single-wire (half-duplex) mode.
+	 *
+	 * @param push_pull  Formic extension (not upstream): drive the single wire push-pull
+	 *                   instead of open-drain (NuttX SER_SINGLEWIRE_PUSHPULL). Added for the
+	 *                   VTX driver (SmartAudio/Tramp), mirroring Betaflight's behaviour where
+	 *                   the line is actively driven high. NOT YET VERIFIED on hardware - if the
+	 *                   VTX link misbehaves, try the default (open-drain) first.
+	 */
+	bool setSingleWireMode(bool push_pull = false);
 
 	bool getSwapRxTxMode() const;
 	bool setSwapRxTxMode();
