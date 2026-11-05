@@ -67,6 +67,12 @@ void LoggedTopics::add_default_topics()
 	add_topic("esc_status");
 	add_topic("failure_detector_status", 100);
 	add_topic("failsafe_flags");
+	// formic debuging 
+	add_topic("formic_vio_jetson");
+	add_topic("formic_odom");
+	add_topic("formic_pos_req");
+	add_topic("formic_ev_flag");
+
 	add_optional_topic("follow_target", 500);
 	add_optional_topic("follow_target_estimator", 200);
 	add_optional_topic("follow_target_status", 400);
@@ -148,6 +154,7 @@ void LoggedTopics::add_default_topics()
 	add_topic("vehicle_rates_setpoint", 20);
 	add_topic("vehicle_roi", 1000);
 	add_topic("vehicle_status");
+	add_topic("vtx");
 	add_optional_topic("vtol_vehicle_status", 200);
 	add_topic("wind", 1000);
 	add_topic("fixed_wing_lateral_setpoint");
@@ -157,6 +164,9 @@ void LoggedTopics::add_default_topics()
 	add_optional_topic("fixed_wing_lateral_guidance_status", 100);
 	add_optional_topic("fixed_wing_lateral_status", 100);
 	add_optional_topic("fixed_wing_runway_control", 100);
+	add_topic("debug_flag", 10);
+	add_topic("formic_ev_flag", 10);
+	add_topic("formic_pos_req");
 
 	// multi topics
 	add_optional_topic_multi("actuator_outputs", 100, 3);
@@ -190,10 +200,13 @@ void LoggedTopics::add_default_topics()
 	add_optional_topic_multi("estimator_status_flags", 10);
 	add_optional_topic_multi("yaw_estimator_status", 1000);
 
+	// EV aid source status (only advertised when EKF2_EV_CTRL enables them)
+	add_optional_topic_multi("estimator_aid_src_ev_vel", 200);
+
 	// log all raw sensors at minimal rate (at least 1 Hz)
 	add_topic_multi("battery_status", 200, 3);
 	add_topic_multi("differential_pressure", 1000, 2);
-	add_topic_multi("distance_sensor", 1000, 2);
+	add_topic_multi("distance_sensor", 200, 2);
 	add_optional_topic_multi("sensor_accel", 1000, 4);
 	add_topic_multi("sensor_baro", 1000, 4);
 	add_topic_multi("sensor_gps", 1000, 2);

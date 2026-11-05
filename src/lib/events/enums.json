@@ -608,6 +608,14 @@
                             "name": "altitude_cruise",
                             "description": "Altitude Cruise"
                         },
+                        "25": {
+                            "name": "formic_alt_hold",
+                            "description": "FormicAltHold"
+                        },
+                        "26": {
+                            "name": "turtle",
+                            "description": "Turtle"
+                        },
                         "255": {
                             "name": "unknown",
                             "description": "[Unknown]"

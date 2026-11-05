@@ -133,6 +133,7 @@ set(msg_files
 	MagWorkerData.msg
 	ManualControlSwitches.msg
 	MavlinkLog.msg
+	DebugFlag.msg
 	MavlinkTunnel.msg
 	MessageFormatRequest.msg
 	MessageFormatResponse.msg
@@ -164,6 +165,7 @@ set(msg_files
 	PositionControllerStatus.msg
 	PositionSetpoint.msg
 	PositionSetpointTriplet.msg
+	PidConsts.msg
 	PowerButtonState.msg
 	PowerMonitor.msg
 	PpsCapture.msg
@@ -209,6 +211,7 @@ set(msg_files
 	SensorsStatusImu.msg
 	SensorUwb.msg
 	SensorAirflow.msg
+	SuperHoldDebug.msg
 	SystemPower.msg
 	TakeoffStatus.msg
 	TaskStackInfo.msg
@@ -237,6 +240,7 @@ set(msg_files
 	VehicleThrustSetpoint.msg
 	VehicleTorqueSetpoint.msg
 	VelocityLimits.msg
+	Vtx.msg
 	WheelEncoders.msg
 	YawEstimatorStatus.msg
 	versioned/ActuatorMotors.msg
@@ -268,11 +272,17 @@ set(msg_files
 	versioned/VehicleLandDetected.msg
 	versioned/VehicleLocalPosition.msg
 	versioned/VehicleOdometry.msg
+	versioned/FormicVehicleOdometry.msg
 	versioned/VehicleRatesSetpoint.msg
 	versioned/VehicleStatus.msg
 	versioned/VtolVehicleStatus.msg
 	versioned/Wind.msg
+	ddsFlag.msg
+	totalArmTime.msg
+	FormicEvFlag.msg
+	FormicPosReq.msg
 )
+
 list(SORT msg_files)
 
 px4_list_make_absolute(msg_files ${CMAKE_CURRENT_SOURCE_DIR} ${msg_files})

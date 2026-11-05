@@ -10,7 +10,7 @@ publications:
 
   - topic: /fmu/out/arming_check_request
     type: px4_msgs::msg::ArmingCheckRequest
-    rate_limit: 5.
+    rate_limit: 5
 
   - topic: /fmu/out/mode_completed
     type: px4_msgs::msg::ModeCompleted
@@ -18,7 +18,7 @@ publications:
 
   - topic: /fmu/out/battery_status
     type: px4_msgs::msg::BatteryStatus
-    rate_limit: 1.
+    rate_limit: 1
 
   - topic: /fmu/out/collision_constraints
     type: px4_msgs::msg::CollisionConstraints
@@ -26,22 +26,22 @@ publications:
 
   - topic: /fmu/out/estimator_status_flags
     type: px4_msgs::msg::EstimatorStatusFlags
-    rate_limit: 5.
+    rate_limit: 5
 
   - topic: /fmu/out/failsafe_flags
     type: px4_msgs::msg::FailsafeFlags
-    rate_limit: 5.
+    rate_limit: 5
 
   - topic: /fmu/out/manual_control_setpoint
     type: px4_msgs::msg::ManualControlSetpoint
-    rate_limit: 25.
+    rate_limit: 25
 
   - topic: /fmu/out/message_format_response
     type: px4_msgs::msg::MessageFormatResponse
 
   - topic: /fmu/out/position_setpoint_triplet
     type: px4_msgs::msg::PositionSetpointTriplet
-    rate_limit: 5.
+    rate_limit: 5
 
   - topic: /fmu/out/sensor_combined
     type: px4_msgs::msg::SensorCombined
@@ -58,21 +58,21 @@ publications:
 
   - topic: /fmu/out/vehicle_land_detected
     type: px4_msgs::msg::VehicleLandDetected
-    rate_limit: 5.
+    rate_limit: 10
 
   - topic: /fmu/out/vehicle_attitude
     type: px4_msgs::msg::VehicleAttitude
 
   - topic: /fmu/out/vehicle_control_mode
     type: px4_msgs::msg::VehicleControlMode
-    rate_limit: 50.
+    rate_limit: 50
 
   - topic: /fmu/out/vehicle_command_ack
     type: px4_msgs::msg::VehicleCommandAck
 
   - topic: /fmu/out/vehicle_global_position
     type: px4_msgs::msg::VehicleGlobalPosition
-    rate_limit: 50.
+    rate_limit: 50
 
   - topic: /fmu/out/vehicle_gps_position
     type: px4_msgs::msg::SensorGps
@@ -80,35 +80,106 @@ publications:
 
   - topic: /fmu/out/vehicle_local_position
     type: px4_msgs::msg::VehicleLocalPosition
-    rate_limit: 50.
+    rate_limit: 50
 
   - topic: /fmu/out/vehicle_odometry
     type: px4_msgs::msg::VehicleOdometry
 
   - topic: /fmu/out/vehicle_status
     type: px4_msgs::msg::VehicleStatus
-    rate_limit: 5.
+    rate_limit: 5
 
   - topic: /fmu/out/airspeed_validated
     type: px4_msgs::msg::AirspeedValidated
-    rate_limit: 50.
+    rate_limit: 50
 
   - topic: /fmu/out/vtol_vehicle_status
     type: px4_msgs::msg::VtolVehicleStatus
 
   - topic: /fmu/out/home_position
     type: px4_msgs::msg::HomePosition
-    rate_limit: 5.
+    rate_limit: 5
 
   - topic: /fmu/out/wind
     type: px4_msgs::msg::Wind
-    rate_limit: 1.
+    rate_limit: 1
 
   - topic: /fmu/out/gimbal_device_attitude_status
     type: px4_msgs::msg::GimbalDeviceAttitudeStatus
     rate_limit: 20.
 
 # Create uORB::Publication
+  # --- Formic additions ---
+  - topic: /fmu/out/vehicle_angular_velocity
+    type: px4_msgs::msg::VehicleAngularVelocity
+
+  - topic: /fmu/out/estimator_sensor_bias
+    type: px4_msgs::msg::EstimatorSensorBias
+    rate_limit: 5
+
+  - topic: /fmu/out/sensor_accel
+    type: px4_msgs::msg::SensorAccel
+    rate_limit: 200
+
+  - topic: /fmu/out/sensor_gyro
+    type: px4_msgs::msg::SensorGyro
+    rate_limit: 200
+
+  - topic: /fmu/out/vehicle_command
+    type: px4_msgs::msg::VehicleCommand
+    rate_limit: 10
+
+  - topic: /fmu/out/estimator_status
+    type: px4_msgs::msg::EstimatorStatus
+    rate_limit: 5
+
+  - topic: /fmu/out/estimator_aid_src_ev_pos
+    type: px4_msgs::msg::EstimatorAidSource2d
+    rate_limit: 10
+
+  - topic: /fmu/out/estimator_aid_src_rng_hgt
+    type: px4_msgs::msg::EstimatorAidSource1d
+    rate_limit: 10
+
+  - topic: /fmu/out/estimator_aid_src_ev_yaw
+    type: px4_msgs::msg::EstimatorAidSource1d
+    rate_limit: 10
+
+  - topic: /fmu/out/vehicle_local_position_setpoint
+    type: px4_msgs::msg::VehicleLocalPositionSetpoint
+    rate_limit: 50
+
+  - topic: /fmu/out/formic/debug_flag
+    type: px4_msgs::msg::DebugFlag
+    rate_limit: 30
+
+  - topic: /fmu/out/camera_trigger
+    type: px4_msgs::msg::CameraTrigger
+    rate_limit: 100
+
+  - topic: /fmu/out/sensor_baro
+    type: px4_msgs::msg::SensorBaro
+
+  - topic: /fmu/out/vehicle_air_data
+    type: px4_msgs::msg::VehicleAirData
+
+  - topic: /fmu/out/sensor_mag
+    type: px4_msgs::msg::SensorMag
+
+  - topic: /fmu/out/distance_sensor
+    type: px4_msgs::msg::DistanceSensor
+
+  - topic: /fmu/out/vehicle_visual_odometry
+    type: px4_msgs::msg::VehicleOdometry
+
+  - topic: /fmu/out/formic_ev_flag
+    type: px4_msgs::msg::FormicEvFlag
+    rate_limit: 10
+
+  - topic: /fmu/out/manual_control_switches
+    type: px4_msgs::msg::ManualControlSwitches
+    rate_limit: 50
+
 subscriptions:
   - topic: /fmu/in/register_ext_component_request
     type: px4_msgs::msg::RegisterExtComponentRequest
@@ -131,8 +202,6 @@ subscriptions:
   - topic: /fmu/in/config_control_setpoints
     type: px4_msgs::msg::VehicleControlMode
 
-  - topic: /fmu/in/distance_sensor
-    type: px4_msgs::msg::DistanceSensor
 
   - topic: /fmu/in/manual_control_input
     type: px4_msgs::msg::ManualControlSetpoint
@@ -225,4 +294,15 @@ subscriptions:
     type: px4_msgs::msg::LandingGear
 
 # Create uORB::PublicationMulti
+  # --- Formic additions ---
+  - topic: /fmu/in/formic_odom
+    type: px4_msgs::msg::FormicVehicleOdometry
+
+  - topic: /fmu/in/formic/debug_flag
+    type: px4_msgs::msg::DebugFlag
+
 subscriptions_multi:
+  # --- Formic additions ---
+  - topic: /fmu/in/distance_sensor
+    type: px4_msgs::msg::DistanceSensor
+
