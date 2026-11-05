@@ -117,6 +117,17 @@
 #define MSP_MODE_AUTOTRIM    29
 #define MSP_CMD_DISPLAYPORT 182
 
+
+
+// #define MSP_ICON_ARDUPILOT_CROSSHAIRS 0x7E
+#define MSP_ICON_AUTOCONFIG_CROSSHAIRS 0x73
+
+// #define MCP_TIMER_ICON 0xBC
+#define MCP_TIMER_ICON 0xBC
+
+
+#define MCP_ARDUPILOT(value) (11+value)
+
 struct msp_esc_sensor_data_t {
 	uint8_t motor_count;
 	uint8_t temperature;
@@ -487,6 +498,78 @@ struct msp_rendor_distanceToHome_t {
 	char str[6]; // 65536
 } __attribute__((packed));
 
+struct msp_rendor_distance_sensor_t {
+	uint8_t subCommand = 0x03; // 0x03 subcommand write string. fixed
+	uint8_t screenYPosition;
+	uint8_t screenXPosition;
+	uint8_t iconAttrs = 0x00;
+	uint8_t iconIndex = 0x7F; // distance sensor icon (using altitude icon)
+
+	char str[8]; // distance in meters (e.g., "12.34")
+} __attribute__((packed));
+
+struct msp_baro_altitude_t {
+	uint8_t subCommand = 0x03; // 0x03 subcommand write string. fixed
+	uint8_t screenYPosition;
+	uint8_t screenXPosition;
+	uint8_t iconAttrs = 0x00;
+	uint8_t iconIndex = 0x7F; // baro altitude icon (using altitude icon)
+
+	char str[8]; // barometric altitude in meters (e.g., "123.45")
+} __attribute__((packed));
+
+struct msp_rendor_total_arm_time_t {
+	uint8_t subCommand = 0x03; // 0x03 subcommand write string. fixed
+	uint8_t screenYPosition;
+	uint8_t screenXPosition;
+	uint8_t iconAttrs = 0x00;
+	uint8_t iconIndex = 0x1A; // total arm time icon (timer icon)
+
+	char str[8]; // total arm time in mm:ss format (e.g., "05:23")
+} __attribute__((packed));
+
+struct msp_rendor_formic_ring_t {
+	uint8_t subCommand = 0x03; // 0x03 subcommand write string. fixed
+	uint8_t screenYPosition;
+	uint8_t screenXPosition;
+	uint8_t iconAttrs = 0x00;
+	uint8_t iconIndex = 0x00; // ring - no icon
+	char str[10]; // "FORMIC: V" or "FORMIC: X"
+	
+} __attribute__((packed));
+
+
+struct msp_rendor_formic_crosshairs_t {
+	uint8_t subCommand = 0x06; // 0x06 MSP_DP_SYS - Display system element
+	uint8_t screenYPosition;
+	uint8_t screenXPosition;
+	uint8_t systemElement = 0x00; // Crosshairs system element ID (0x00 = CROSSHAIR)
+	uint8_t iconIndex = 0x7E; // no icon
+} __attribute__((packed));
+
+
+
+struct msp_rendor_formic_vision_quality_t {
+	uint8_t subCommand = 0x06; 
+	uint8_t screenYPosition;
+	uint8_t screenXPosition;
+	uint8_t systemElement = 0x00; // Crosshairs system element ID (0x00 = CROSSHAIR)
+	uint8_t iconIndex = 0x7E; // no icon
+	char str[8];
+} __attribute__((packed));
+
+
+struct msp_rendor_formicc_vio_status_t {
+	uint8_t subCommand = 0x06; 
+	uint8_t screenYPosition;
+	uint8_t screenXPosition;
+	uint8_t systemElement = 0x00; // Crosshairs system element ID (0x00 = CROSSHAIR)
+	uint8_t iconIndex = 0x7E; // no icon
+	char str[8];
+} __attribute__((packed));
+
+
+
 
 // values for msp_nav_status_t.mode
 #define MSP_NAV_STATUS_MODE_NONE   0
@@ -568,7 +651,6 @@ struct msp_uid_t {
 	uint32_t uid1;
 	uint32_t uid2;
 } __attribute__((packed));
-
 
 // MSP_FEATURE mask
 #define MSP_FEATURE_RX_PPM              (1 <<  0)
@@ -800,6 +882,9 @@ struct msp_osd_config_t {
 	uint16_t osd_disarmed_pos;
 	uint16_t osd_home_dir_pos;
 	uint16_t osd_home_dist_pos;
+	uint16_t osd_distance_sensor_pos;
+	uint16_t osd_total_arm_time_pos;
+	uint16_t osd_total_activated_time_pos;
 	uint16_t osd_numerical_heading_pos;
 	uint16_t osd_numerical_vario_pos;
 	uint16_t osd_compass_bar_pos;

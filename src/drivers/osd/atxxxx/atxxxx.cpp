@@ -178,7 +178,7 @@ OSDatxxxx::add_character_to_screen(char c, uint8_t pos_x, uint8_t pos_y)
 	int ret = PX4_ERROR;
 
 	if (position > 0xFF) {
-		position_lsb = static_cast<uint8_t>(position) - 0xFF;
+		position_lsb = static_cast<uint8_t>(position & 0xFF);
 		ret = writeRegister(0x05, 0x01); //DMAH
 
 	} else {
@@ -304,7 +304,7 @@ OSDatxxxx::enable_screen()
 	int ret = PX4_OK;
 
 	ret |= readRegister(0x00, &data, 1);
-	ret |= writeRegister(0x00, data | 0x48);
+	ret |= writeRegister(0x00, data | 0x08); // OSD enable only, keep PAL/NTSC bit from init_osd()
 
 	return ret;
 }
@@ -368,6 +368,14 @@ OSDatxxxx::update_topics()
 
 		_arming_state = vehicle_status.arming_state;
 		_nav_state = vehicle_status.nav_state;
+	}
+
+	/* update vision (VIO) state, same labels as msp_osd FORMIC_VIO_STATUS */
+	if (_formic_ev_flag_sub.updated()) {
+		formic_ev_flag_s formic_ev_flag{};
+		_formic_ev_flag_sub.copy(&formic_ev_flag);
+
+		_vision_state = formic_ev_flag.dstate;
 	}
 
 	return PX4_OK;
@@ -452,17 +460,22 @@ OSDatxxxx::update_screen()
 		clear_line(1, 3, 10);
 	}
 
-	const char *flight_mode = "";
-
 	if (_arming_state == vehicle_status_s::ARMING_STATE_ARMED) {
 		float flight_time_sec = static_cast<float>((hrt_absolute_time() - _arming_timestamp) / (1e6f));
 		ret |= add_flighttime(flight_time_sec, 1, 14);
-
-	} else {
-		flight_mode = get_flight_mode(_nav_state);
 	}
 
-	add_string_to_screen_centered(flight_mode, 12, 10);
+	add_string_to_screen_centered(get_flight_mode(_nav_state), 11, 10);
+
+	// vision state under the flight mode (Dstate, see formic_watchdog_ev.hpp)
+	const char *vision = "NO VIS";
+
+	switch (_vision_state) {
+	case 1: vision = "VIS OK"; break; // Dstate::VisionON
+	case 2: vision = "DEGRAD"; break; // Dstate::DEGRADED
+	}
+
+	add_string_to_screen_centered(vision, 12, 10);
 
 	return ret;
 }

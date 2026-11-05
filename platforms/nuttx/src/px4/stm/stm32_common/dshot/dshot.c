@@ -55,6 +55,11 @@
 #define BOARD_DMA_NUM_DSHOT_CHANNELS 1
 #endif
 
+// This can be overriden for a specific board.
+#ifndef BOARD_BIDIRECTIONAL_DSHOT_TIMER_INDEX
+#define BOARD_BIDIRECTIONAL_DSHOT_TIMER_INDEX 0
+#endif
+
 // DShot protocol definitions
 #define ONE_MOTOR_DATA_SIZE         16u
 #define MOTOR_PWM_BIT_1             14u
@@ -123,7 +128,7 @@ static uint16_t dshot_capture_buffer[MAX_NUM_CHANNELS_PER_TIMER][CHANNEL_CAPTURE
 px4_cache_aligned_data() = {};
 
 static bool     _bidirectional = false;
-static uint8_t  _bidi_timer_index = 0; // TODO: BDSHOT_TIM param to select timer index?
+static uint8_t  _bidi_timer_index = BOARD_BIDIRECTIONAL_DSHOT_TIMER_INDEX; // TODO: BDSHOT_TIM param to select timer index?
 static uint32_t _dshot_frequency = 0;
 
 // eRPM data for channels on the singular timer
@@ -397,14 +402,20 @@ static void select_next_capture_channel(uint8_t timer_index)
 	bool found = false;
 	int next_index = timer_configs[timer_index].capture_channel_index;
 
-	while (!found) {
+	// Bounded to MAX_NUM_CHANNELS_PER_TIMER full passes: some timers (e.g. TIM4 on
+	// STM32H7) don't have a DMA request line for every channel (dma_map_ch == 0),
+	// so those channels can never be captured and must be skipped here. If none of
+	// the initialized channels have a valid capture DMA map, bail out instead of
+	// spinning forever.
+	for (uint8_t attempts = 0; attempts < MAX_NUM_CHANNELS_PER_TIMER && !found; attempts++) {
 		next_index++;
 
 		if (next_index > 3) {
 			next_index = 0;
 		}
 
-		if (timer_configs[timer_index].initialized_channels[next_index]) {
+		if (timer_configs[timer_index].initialized_channels[next_index] &&
+		    io_timers[timer_index].dshot.dma_map_ch[next_index] != 0) {
 			found = true;
 		}
 	}
