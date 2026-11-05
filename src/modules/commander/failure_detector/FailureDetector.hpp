@@ -61,6 +61,7 @@
 #include <uORB/topics/vehicle_imu_status.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/pwm_input.h>
+#include <uORB/topics/failure_detector_status.h>
 
 union failure_detector_status_u {
 	struct {
@@ -90,6 +91,7 @@ public:
 	float getImbalancedPropMetric() const { return _imbalanced_prop_lpf.getState(); }
 	uint16_t getMotorFailures() const { return _motor_failure_esc_timed_out_mask | _motor_failure_esc_under_current_mask; }
 	uint16_t getMotorStopMask() { return _failure_injector.getMotorStopMask(); }
+	void publishStatus();
 
 private:
 	void updateAttitudeStatus(const vehicle_status_s &vehicle_status);
@@ -123,6 +125,8 @@ private:
 	uORB::Subscription _sensor_selection_sub{ORB_ID(sensor_selection)};
 	uORB::Subscription _vehicle_imu_status_sub{ORB_ID(vehicle_imu_status)};
 	uORB::Subscription _actuator_motors_sub{ORB_ID(actuator_motors)};
+
+	uORB::Publication<failure_detector_status_s> _failure_detector_status_pub{ORB_ID(failure_detector_status)};
 
 	FailureInjector _failure_injector;
 

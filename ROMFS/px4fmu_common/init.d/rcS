@@ -613,6 +613,29 @@ else
 	unset RC_LOGGING
 
 	#
+	# Start the VTX services.
+	#
+	if ! param compare -s VTX_SER_CFG 0
+	then
+		set RC_VTXTABLE ${R}etc/init.d/rc.vtxtable
+		if [ -f ${RC_VTXTABLE} ]
+		then
+			. ${RC_VTXTABLE}
+		fi
+		unset RC_VTXTABLE
+	fi
+
+	#
+	# Start the formic logger flag module.
+	#
+	formic_logger_flag start
+
+	#
+	# Start the formic watchdog EV module.
+	#
+	formic_watchdog_ev start
+
+	#
 	# Set additional parameters and env variables for selected AUTOSTART.
 	#
 	if ! param compare SYS_AUTOSTART 0

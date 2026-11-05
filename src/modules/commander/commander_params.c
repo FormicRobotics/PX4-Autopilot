@@ -98,6 +98,19 @@ PARAM_DEFINE_FLOAT(TRIM_YAW, 0.0f);
 PARAM_DEFINE_INT32(COM_DL_LOSS_T, 10);
 
 /**
+ * Position-wait timeout
+ *
+ * Maximum number of seconds to wait for a the ekf of the vio and the ekf_ecl to converge.
+ *
+ * @group Commander
+ * @unit s
+ * @min 1
+ * @max 20
+ * @increment 1
+ */
+PARAM_DEFINE_INT32(COM_POS_WAIT_LIM, 5);
+
+/**
  * High Latency Datalink loss time threshold
  *
  * After this amount of seconds without datalink the data link lost mode triggers
@@ -844,6 +857,18 @@ PARAM_DEFINE_INT32(COM_ARM_HFLT_CHK, 1);
 PARAM_DEFINE_INT32(COM_ARM_ODID, 0);
 
 /**
+ * DDS connection required for arming
+ *
+ * Require DDS (Data Distribution Service) connection before allowing arming.
+ *
+ * @group Commander
+ * @value 0 Disabled (DDS connection not required)
+ * @value 1 Warning only (allow arming but warn if DDS not connected)
+ * @value 2 Required (prevent arming if DDS not connected)
+ */
+PARAM_DEFINE_INT32(COM_ARM_DDS, 0);
+
+/**
  * Enforced delay between arming and further navigation
  *
  * The minimal time from arming the motors until moving the vehicle is possible is COM_SPOOLUP_TIME seconds.
@@ -1005,6 +1030,8 @@ PARAM_DEFINE_FLOAT(COM_ARM_BAT_MIN, -1.f);
  */
 PARAM_DEFINE_INT32(COM_THROW_EN, 0);
 
+
+
 /**
  * Minimum speed for the throw start
  *
@@ -1046,3 +1073,24 @@ PARAM_DEFINE_INT32(COM_FLTT_LOW_ACT, 0);
  *
  */
 PARAM_DEFINE_INT32(COM_MODE_ARM_CHK, 0);
+
+
+
+/**
+ * Minimum SLAM and MSCKF feature count threshold
+ *
+ * Below this value the VIO estimate is considered poor. The VIO fusion is
+ * suspended and the system prepares to dead-reckon for a short period.
+ * If the feature count recovers, the current flight mode is maintained and
+ * VIO fusion resumes. If features do not return, the mode switches to
+ * Altitude Hold. The counter is reset once valid data is received again.
+ *
+ * Set to 0 to disable.
+ *
+ * @group Commander
+ * @min 0
+ */
+PARAM_DEFINE_INT32(FORMIC_VIO_MF, 5);
+
+
+

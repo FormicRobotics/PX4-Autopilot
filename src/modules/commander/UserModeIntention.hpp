@@ -33,7 +33,13 @@
 
 #pragma once
 
+#include <uORB/Subscription.hpp>
+#include <uORB/Publication.hpp>
 #include <uORB/topics/vehicle_status.h>
+#include <uORB/topics/estimator_aid_source1d.h>
+#include <uORB/topics/formic_pos_req.h>
+#include <uORB/topics/formic_ev_flag.h>
+
 #include "HealthAndArmingChecks/HealthAndArmingChecks.hpp"
 
 enum class ModeChangeSource {
@@ -89,9 +95,30 @@ public:
 
 	bool getHadModeChangeAndClear() { bool ret = _had_mode_change; _had_mode_change = false; return ret; }
 
+	///////add by naor ////////////////
+	// Called every Commander run-loop iteration.
+	// If a position-required mode is pending, counts consecutive iterations
+	// where position is valid and switches into the mode after POS_STABLE_THRESHOLD.
+	void tick();
+
+	// Called from Commander every loop while failsafe is active. Keeps requesting position
+	// (let_update_ev = true) as long as the user's intended mode still requires it, even if
+	// failsafe has temporarily forced a non-position actual nav_state - only clears the
+	// request once the user's intention itself no longer requires position.
+	void onFailsafeNavState();
+	///////add by naor ////////////////
+
 private:
 	bool isArmed() const { return _vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED; }
 	bool isTakeOffIntended(uint8_t user_intented_nav_state) const {return user_intented_nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF || user_intented_nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_VTOL_TAKEOFF;}
+
+	///////add by naor ////////////////
+	// Returns true if nav_state is one that requires local or global position.
+	bool modeRequiresPosition(uint8_t nav_state) const;
+	// True when formic_watchdog_ev reports fresh EV data and EKF/EV convergence.
+	bool evReadyForPosition();
+	void publish_formic_pos_req(bool pos_requested);
+	///////add by naor ////////////////
 
 	const vehicle_status_s &_vehicle_status;
 	const HealthAndArmingChecks &_health_and_arming_checks;
@@ -102,4 +129,10 @@ private:
 
 	bool _ever_had_mode_change{false}; ///< true if there was ever a mode change call (also if the same mode as already set)
 	bool _had_mode_change{false}; ///< true if there was a mode change call since the last getHadModeChangeAndClear()
+
+	///////add by naor ////////////////
+	uint8_t _pending_nav_state{UINT8_MAX};        ///< mode waiting for position lock (UINT8_MAX = none)
+	hrt_abstime _pos_wait_start_us{0};            ///< hrt timestamp when the pending request was parked (0 = not active)
+	uORB::Publication<formic_pos_req_s> _formic_pos_req_pub{ORB_ID(formic_pos_req)}; ///< Formic position request publisher
+	uORB::Subscription _formic_ev_flag_sub{ORB_ID(formic_ev_flag)}; ///< Sub to check the EV flag status
 };

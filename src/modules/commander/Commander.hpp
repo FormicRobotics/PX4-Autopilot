@@ -54,7 +54,7 @@
 #include <uORB/Publication.hpp>
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/actuator_test.h>
-#include <uORB/topics/failure_detector_status.h>
+#include <uORB/topics/total_arm_time.h>
 #include <uORB/topics/vehicle_command_ack.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_status.h>
@@ -188,6 +188,7 @@ private:
 	bool getPrearmState() const;
 
 	void handleAutoDisarm();
+	void updateTotalArmTime(hrt_abstime arm_time_us);
 
 	bool handleModeIntentionAndFailsafe();
 
@@ -313,7 +314,9 @@ private:
 	// Publications
 	uORB::Publication<actuator_armed_s>			_actuator_armed_pub{ORB_ID(actuator_armed)};
 	uORB::Publication<actuator_test_s>			_actuator_test_pub{ORB_ID(actuator_test)};
-	uORB::Publication<failure_detector_status_s>		_failure_detector_status_pub{ORB_ID(failure_detector_status)};
+	uORB::Publication<total_arm_time_s>			_total_arm_time_pub{ORB_ID(total_arm_time)};
+	uORB::SubscriptionData<total_arm_time_s>		_total_arm_time_sub{ORB_ID(total_arm_time)};
+	uint64_t _total_arm_time_at_session_start_ms{0};	///< total arm time at the start of current arm session
 	uORB::Publication<vehicle_command_ack_s>		_vehicle_command_ack_pub{ORB_ID(vehicle_command_ack)};
 	uORB::Publication<vehicle_command_s>			_vehicle_command_pub{ORB_ID(vehicle_command)};
 	uORB::Publication<vehicle_control_mode_s>		_vehicle_control_mode_pub{ORB_ID(vehicle_control_mode)};

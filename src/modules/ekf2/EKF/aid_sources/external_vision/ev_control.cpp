@@ -99,7 +99,7 @@ void Ekf::controlExternalVisionFusion(const imuSample &imu_sample)
 
 	} else if ((_control_status.flags.ev_pos || _control_status.flags.ev_vel || _control_status.flags.ev_yaw
 		    || _control_status.flags.ev_hgt)
-		   && isTimedOut(_ev_sample_prev.time_us, 2 * EV_MAX_INTERVAL)) {
+		   && isTimedOut(_ev_sample_prev.time_us, 2* EV_MAX_INTERVAL)) {
 
 		// Turn off EV fusion mode if no data has been received
 		stopEvPosFusion();
@@ -109,9 +109,42 @@ void Ekf::controlExternalVisionFusion(const imuSample &imu_sample)
 
 		_ev_q_error_initialized = false;
 
+		// add by naor //
+		_ev_sample_prev = {};
+		_ev_pos_b_est.reset();
+		_ev_hgt_b_est.reset();
+
+		// add by naor //
 		ECL_WARN("vision data stopped");
 	}
 }
+
+// add by naor //
+void Ekf::forceEvAidingTimeout()
+{
+	// drop any queued VIO samples so they can't restart fusion after the request was dropped
+	if (_ext_vision_buffer) {
+		_ext_vision_buffer->reset();
+	}
+
+	stopEvPosFusion();
+	stopEvVelFusion();
+	stopEvYawFusion();
+	stopEvHgtFusion();
+
+	_ev_q_error_initialized = false;
+	_ev_sample_prev = {};
+	_ev_pos_b_est.reset();
+	_ev_hgt_b_est.reset();
+
+	// Expire the dead-reckoning clock: if no other source aids horizontally,
+	// updateHorizontalDeadReckoningstatus() flags the solution invalid on the next update
+	// regardless of EKF2_NOAID_TOUT. Another active source (e.g. GNSS) restarts the clock.
+	_time_last_horizontal_aiding = 0;
+
+	ECL_WARN("vision aiding expired (pos request dropped or VIO epoch jump)");
+}
+// add by naor //
 
 void Ekf::updateEvAttitudeErrorFilter(extVisionSample &ev_sample, bool ev_reset)
 {

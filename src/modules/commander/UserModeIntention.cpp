@@ -33,6 +33,10 @@
 
 
 #include "UserModeIntention.hpp"
+#include <parameters/param.h>
+#include <drivers/drv_hrt.h>
+
+using namespace time_literals;
 
 UserModeIntention::UserModeIntention(const vehicle_status_s &vehicle_status,
 				     const HealthAndArmingChecks &health_and_arming_checks, ModeChangeHandler *handler)
@@ -66,6 +70,31 @@ bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource
 				// fallback and once can_run becomes true, the actual user intended mode will be selected.
 			}
 		}
+
+		///////add by naor ////////////////
+		// canRun() alone is not enough for a position mode: after the EV feed is cut, EKF2 keeps
+		// reporting a valid position until EKF2_NOAID_TOUT expires. Require the same EV convergence
+		// gate that tick() uses, so a direct switch can't enter position mode on a stale estimate.
+		if (allow_change && modeRequiresPosition(user_intended_nav_state) && !evReadyForPosition()) {
+			allow_change = false;
+		}
+
+		// If change failed because position is not yet valid, park the request.
+		// tick() will retry, with no timeout, until position becomes valid and EKF converges.
+		if (!allow_change && modeRequiresPosition(user_intended_nav_state)) {
+			// Only (re)start the wait clock when this is a *fresh* pending request, so that
+			// re-issuing the same request while already pending (failsafe re-forcing a mode,
+			// a GCS resending the command, ...) doesn't reset the elapsed-time log below.
+			if (_pending_nav_state != user_intended_nav_state) {
+				_pos_wait_start_us = hrt_absolute_time();
+				PX4_INFO("Mode %d requires position - waiting for solution", user_intended_nav_state);
+			}
+
+			_pending_nav_state = user_intended_nav_state;
+			// Signal immediately that we are trying to enter a position mode.
+			publish_formic_pos_req(true);
+		}
+		///////add by naor ////////////////
 	}
 
 	// never allow to change out of termination state
@@ -74,6 +103,15 @@ bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource
 	if (allow_change) {
 		_had_mode_change = true;
 		_user_intented_nav_state = user_intended_nav_state;
+
+		///////add by naor ////////////////
+		// A successful explicit change cancels any pending position-wait.
+		_pending_nav_state = UINT8_MAX;
+		_pos_wait_start_us = 0;
+
+		// Publish let_update_ev: true when entering a position mode, false otherwise.
+		publish_formic_pos_req(modeRequiresPosition(user_intended_nav_state));
+		///////add by naor ////////////////
 
 		// Special case termination state: even though this mode prevents arming,
 		// still don't switch out of it after disarm and thus store it in _nav_state_after_disarming.
@@ -90,6 +128,89 @@ bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource
 
 	return allow_change;
 }
+
+///////add by naor ////////////////
+bool UserModeIntention::modeRequiresPosition(uint8_t nav_state) const
+{
+	const failsafe_flags_s &flags = _health_and_arming_checks.failsafeFlags();
+	const uint32_t bit = 1u << nav_state;
+	return (flags.mode_req_local_position & bit) || (flags.mode_req_global_position & bit)
+	       || (flags.mode_req_local_position_relaxed & bit) || (flags.mode_req_global_position_relaxed & bit);
+}
+
+void UserModeIntention::tick()
+{
+	///////add by naor ////////////////
+
+	if (_pending_nav_state == UINT8_MAX) {
+		return;
+	}
+
+	const bool pos_ok = _health_and_arming_checks.canRun(_pending_nav_state);
+
+	if (pos_ok && evReadyForPosition()) {
+		const float elapsed_s = hrt_elapsed_time(&_pos_wait_start_us) * 1e-6f;
+		PX4_INFO("Position available - switching to pending mode %d after %.1f s", _pending_nav_state, (double)elapsed_s);
+		const uint8_t mode = _pending_nav_state;
+		_pending_nav_state = UINT8_MAX;
+
+		_pos_wait_start_us = 0;
+		change(mode, ModeChangeSource::User, false, true);
+		publish_formic_pos_req(true);
+
+	} else {
+		// Keep retrying with no timeout: stay parked in the pending mode and keep
+		// requesting position until pos_ok && ekfs_converged becomes true.
+		publish_formic_pos_req(true);
+	}
+}
+
+
+void UserModeIntention::onFailsafeNavState()
+{
+	// Keep requesting position as long as the *user's intention* (or a still-pending
+	// position request) needs it, even if failsafe has temporarily forced the actual
+	// nav_state into a non-position mode (e.g. POSCTL -> ALTCTL after a transient position
+	// loss). Publishing pos_req = false here would cut the EV/vision feed to the estimator
+	// (see formic_watchdog_ev), which is exactly what's needed to regain position - doing so
+	// would permanently lock us out of ever recovering, since the failsafe can only clear
+	// once position becomes valid again. Only stop requesting position once the user's
+	// intended mode itself no longer requires it (e.g. they explicitly switched to ALTCTL/STAB).
+	if (modeRequiresPosition(_user_intented_nav_state)
+	    || (_pending_nav_state != UINT8_MAX && modeRequiresPosition(_pending_nav_state))) {
+		publish_formic_pos_req(true);
+		return;
+	}
+
+	_pending_nav_state = UINT8_MAX;
+	_pos_wait_start_us = 0;
+	publish_formic_pos_req(false);
+}
+
+bool UserModeIntention::evReadyForPosition()
+{
+	formic_ev_flag_s formic_ev_flag{};
+
+	if (!_formic_ev_flag_sub.copy(&formic_ev_flag)) {
+		return false;
+	}
+
+	// formic_watchdog_ev publishes every 10 ms - a stale flag means the watchdog is not running
+	const bool flag_fresh = hrt_elapsed_time(&formic_ev_flag.timestamp) < 100_ms;
+
+	return flag_fresh && formic_ev_flag.ev_data_arrived && formic_ev_flag.ekfs_converged;
+}
+
+void UserModeIntention::publish_formic_pos_req(bool pos_requested)
+{
+	formic_pos_req_s pos_req{};
+	pos_req.pos_req = pos_requested;
+	pos_req.timestamp = hrt_absolute_time();
+	_formic_pos_req_pub.publish(pos_req);
+
+
+}
+	///////add by naor ////////////////
 
 void UserModeIntention::onDisarm()
 {

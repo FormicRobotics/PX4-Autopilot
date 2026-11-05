@@ -622,6 +622,11 @@ transition_result_t Commander::arm(arm_disarm_reason_t calling_reason, bool run_
 	_vehicle_status.arming_state = vehicle_status_s::ARMING_STATE_ARMED;
 	_vehicle_status.latest_arming_reason = (uint8_t)calling_reason;
 
+	// Formic: store the cumulative base time at the start of this arm session
+	// so total arm time keeps accumulating across arm/disarm cycles
+	_total_arm_time_sub.update();
+	_total_arm_time_at_session_start_ms = _total_arm_time_sub.get().cumulative_base_ms;
+
 	mavlink_log_info(&_mavlink_log_pub, "Armed by %s\t", arm_disarm_reason_str(calling_reason));
 	events::send<events::px4::enums::arm_disarm_reason_t>(events::ID("commander_armed_by"), events::Log::Info,
 			"Armed by {1}", calling_reason);
@@ -661,6 +666,21 @@ transition_result_t Commander::disarm(arm_disarm_reason_t calling_reason, bool f
 
 			return TRANSITION_DENIED;
 		}
+	}
+
+	// Formic: update total arm time before resetting armed_time and persist the
+	// final total as the cumulative base for the next session
+	if (_vehicle_status.armed_time > 0) {
+		updateTotalArmTime(_vehicle_status.armed_time);
+
+		_total_arm_time_sub.update();
+		const total_arm_time_s final_msg = _total_arm_time_sub.get();
+
+		total_arm_time_s cumulative_update{};
+		cumulative_update.timestamp = hrt_absolute_time();
+		cumulative_update.cumulative_base_ms = final_msg.total_arm_time_ms;
+		cumulative_update.total_arm_time_ms = final_msg.total_arm_time_ms;
+		_total_arm_time_pub.publish(cumulative_update);
 	}
 
 	_vehicle_status.armed_time = 0;
@@ -1802,6 +1822,12 @@ void Commander::run()
 
 	_boot_timestamp = hrt_absolute_time();
 
+	// Formic: initialize total arm time topic
+	total_arm_time_s total_arm_time_init{};
+	total_arm_time_init.timestamp = _boot_timestamp;
+	_total_arm_time_pub.publish(total_arm_time_init);
+	_total_arm_time_at_session_start_ms = 0;
+
 	arm_auth_init(&_mavlink_log_pub, &_vehicle_status.system_id);
 
 	while (!should_exit()) {
@@ -1944,21 +1970,12 @@ void Commander::run()
 			_vehicle_status.timestamp = hrt_absolute_time();
 			_vehicle_status_pub.publish(_vehicle_status);
 
-			// failure_detector_status publish
-			failure_detector_status_s fd_status{};
-			fd_status.fd_roll = _failure_detector.getStatusFlags().roll;
-			fd_status.fd_pitch = _failure_detector.getStatusFlags().pitch;
-			fd_status.fd_alt = _failure_detector.getStatusFlags().alt;
-			fd_status.fd_ext = _failure_detector.getStatusFlags().ext;
-			fd_status.fd_arm_escs = _failure_detector.getStatusFlags().arm_escs;
-			fd_status.fd_battery = _failure_detector.getStatusFlags().battery;
-			fd_status.fd_imbalanced_prop = _failure_detector.getStatusFlags().imbalanced_prop;
-			fd_status.fd_motor = _failure_detector.getStatusFlags().motor;
-			fd_status.imbalanced_prop_metric = _failure_detector.getImbalancedPropMetric();
-			fd_status.motor_failure_mask = _failure_detector.getMotorFailures();
-			fd_status.motor_stop_mask = _failure_detector.getMotorStopMask();
-			fd_status.timestamp = hrt_absolute_time();
-			_failure_detector_status_pub.publish(fd_status);
+			_failure_detector.publishStatus();
+
+			// Formic: update total arm time periodically while armed
+			if (isArmed() && _vehicle_status.armed_time > 0) {
+				updateTotalArmTime(_vehicle_status.armed_time);
+			}
 		}
 
 		checkWorkerThread();
@@ -2338,6 +2355,10 @@ void Commander::handleAutoDisarm()
 
 bool Commander::handleModeIntentionAndFailsafe()
 {
+	// Formic: tick the position-stable counter. If a position-required mode is pending,
+	// this counts valid-position iterations and switches after POS_STABLE_THRESHOLD.
+	_user_mode_intention.tick();
+
 	const uint8_t prev_nav_state = _vehicle_status.nav_state;
 	const FailsafeBase::Action prev_failsafe_action = _failsafe.selectedAction();
 	const uint8_t prev_failsafe_defer_state = _vehicle_status.failsafe_defer_state;
@@ -2387,6 +2408,12 @@ bool Commander::handleModeIntentionAndFailsafe()
 
 	_vehicle_status.failsafe = _failsafe.inFailsafe();
 	_vehicle_status.failsafe_and_user_took_over = _failsafe.userTakeoverActive();
+
+	// Formic: while failsafe is active, keep (or stop) requesting position based on the
+	// user's intended mode - not the failsafe-forced actual nav_state. See onFailsafeNavState().
+	if (_vehicle_status.failsafe) {
+		_user_mode_intention.onFailsafeNavState();
+	}
 
 	if (prev_nav_state != _vehicle_status.nav_state) {
 		_vehicle_status.nav_state_timestamp = hrt_absolute_time();
@@ -3065,4 +3092,17 @@ The commander module contains the state machine for mode switching and failsafe 
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 
 	return 1;
+}
+
+void Commander::updateTotalArmTime(hrt_abstime arm_time_us)
+{
+	const hrt_abstime now = hrt_absolute_time();
+	const uint64_t current_arm_time_us = now - arm_time_us;
+
+	// cumulative base (from session start) + current session time, no double counting
+	total_arm_time_s total_arm_time_msg{};
+	total_arm_time_msg.timestamp = now;
+	total_arm_time_msg.cumulative_base_ms = _total_arm_time_at_session_start_ms;
+	total_arm_time_msg.total_arm_time_ms = _total_arm_time_at_session_start_ms + (current_arm_time_us / 1000);
+	_total_arm_time_pub.publish(total_arm_time_msg);
 }

@@ -87,6 +87,8 @@
 #include <uORB/topics/vehicle_odometry.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/yaw_estimator_status.h>
+#include <uORB/topics/formic_pos_req.h>
+#include <uORB/topics/formic_vehicle_odometry.h>
 
 #if defined(CONFIG_EKF2_AIRSPEED)
 # include <uORB/topics/airspeed.h>
@@ -328,6 +330,13 @@ private:
 	matrix::Vector3f _last_ev_bias_published{};
 
 	uORB::Subscription _ev_odom_sub{ORB_ID(vehicle_visual_odometry)};
+
+	// add by naor //
+	uORB::Subscription _formic_pos_req_sub{ORB_ID(formic_pos_req)};
+	bool _formic_pos_req_prev{false};
+	uORB::Subscription _formic_odom_sub{ORB_ID(formic_odom)};
+	uint64_t _formic_epoch_prev{0};	///< last VIO epoch seen, 0 = none yet
+	// add by naor //
 
 	uORB::PublicationMulti<estimator_bias3d_s> _estimator_ev_pos_bias_pub{ORB_ID(estimator_ev_pos_bias)};
 #endif // CONFIG_EKF2_EXTERNAL_VISION
@@ -603,6 +612,10 @@ private:
 
 		(ParamExtInt<px4::params::EKF2_NOAID_TOUT>)
 		_param_ekf2_noaid_tout,	///< maximum lapsed time from last fusion of measurements that constrain drift before the EKF will report the horizontal nav solution invalid (uSec)
+
+		(ParamInt<px4::params::EKF2_TOUT_MULT>)
+		_param_ekf2_tout_mult,	///< multiplier applied to EKF2_NOAID_TOUT for formic VIO position-mode timeout
+
 
 #if defined(CONFIG_EKF2_TERRAIN) || defined(CONFIG_EKF2_OPTICAL_FLOW) || defined(CONFIG_EKF2_RANGE_FINDER)
 		(ParamExtFloat<px4::params::EKF2_MIN_RNG>) _param_ekf2_min_rng,
