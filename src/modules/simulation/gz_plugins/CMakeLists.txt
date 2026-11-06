@@ -31,6 +31,13 @@
 #
 ############################################################################
 
+# Set policy version minimum to allow compatibility with older config files (like jsoncpp)
+# This is needed because system-installed jsoncpp config files may use older CMake policy syntax
+# The jsoncpp config file uses cmake_policy(VERSION < 3.5) which is no longer allowed by default
+# Setting CMAKE_POLICY_VERSION_MINIMUM as a cache variable allows imported packages to use older policy syntax
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Minimum CMake policy version" FORCE)
+cmake_policy(VERSION 3.5...3.30)
+
 project(px4_gz_plugins)
 
 if(NOT DEFINED ENV{GZ_DISTRO} OR NOT "$ENV{GZ_DISTRO}"  STREQUAL "harmonic")
@@ -63,7 +70,7 @@ if (gz-transport_FOUND)
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PX4_GZ_PLUGIN_OUTPUT_DIR})
 
     # Add our plugins as subdirectories
-    add_subdirectory(optical_flow)
+#     add_subdirectory(optical_flow)
     add_subdirectory(template_plugin)
     add_subdirectory(gstreamer)
     add_subdirectory(moving_platform_controller)
@@ -73,8 +80,12 @@ if (gz-transport_FOUND)
 
     # Add an alias target for each plugin
     if (TARGET GstCameraSystem)
-        add_custom_target(px4_gz_plugins ALL DEPENDS OpticalFlowSystem MovingPlatformController TemplatePlugin GenericMotorModelPlugin BuoyancySystemPlugin GstCameraSystem SpacecraftThrusterModelPlugin)
+        add_custom_target(px4_gz_plugins ALL DEPENDS 
+	# OpticalFlowSystem 
+	MovingPlatformController TemplatePlugin GenericMotorModelPlugin BuoyancySystemPlugin GstCameraSystem SpacecraftThrusterModelPlugin)
     else()
-        add_custom_target(px4_gz_plugins ALL DEPENDS OpticalFlowSystem MovingPlatformController TemplatePlugin GenericMotorModelPlugin BuoyancySystemPlugin SpacecraftThrusterModelPlugin)
+        add_custom_target(px4_gz_plugins ALL DEPENDS 
+	# OpticalFlowSystem 
+	MovingPlatformController TemplatePlugin GenericMotorModelPlugin BuoyancySystemPlugin SpacecraftThrusterModelPlugin)
     endif()
 endif()
