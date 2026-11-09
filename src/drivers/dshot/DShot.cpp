@@ -33,6 +33,10 @@
 
 #include "DShot.h"
 
+#include <cmath>
+#include <cstdio>
+#include <math.h> // NAN
+
 #include <px4_arch/io_timer.h>
 
 #include <px4_platform_common/sem.hpp>
@@ -379,6 +383,61 @@ bool DShot::updateOutputs(uint16_t outputs[MAX_ACTUATORS],
 		return false;
 	}
 
+	// ---- Turtle recovery: may take over the outputs while disarmed ----------
+	_trtl_output_seen = true;
+	update_turtle_inputs(); // the mixer has consumed the latest arming/test state by this callback
+
+	if (_trtl_core.owns_outputs() && _current_command.valid()) {
+		// A queued DShot command must not run while direction is temporarily reversed.
+		_current_command.num_repetitions = 0;
+		_trtl_input.hardware_ok = false;
+		PX4_WARN("turtle: cancelled concurrent DShot command");
+	}
+
+	_trtl_frame = _trtl_core.step(hrt_absolute_time(), _trtl_input);
+
+	// Do not let a motor-test path bypass startup direction normalisation.
+	if (_trtl_frame.action == turtle::Action::NORMAL && _trtl_requested
+	    && (!_trtl_core.configured() || !_trtl_core.synced())
+	    && !(_mixing_output.armed().armed || _trtl_armed.armed)
+	    && turtle::interlock().owner() != turtle::Owner::FLIGHT) {
+		_trtl_frame = {turtle::Action::STOP, 0, 0};
+	}
+
+	if (_trtl_frame.action != turtle::Action::NORMAL) {
+		for (unsigned i = 0; i < MAX_ACTUATORS; ++i) {
+			const uint32_t bit = uint32_t{1} << i;
+
+			if (!(_output_mask & bit)) { continue; }
+
+			if (!(_trtl_frame.outputs & bit)) {
+				up_dshot_motor_command(i, DShot_cmd_motor_stop, false);
+
+			} else if (_trtl_frame.action == turtle::Action::REVERSE) {
+				up_dshot_motor_command(i, DShot_cmd_spin_direction_reversed, true);
+
+			} else if (_trtl_frame.action == turtle::Action::RESTORE) {
+				up_dshot_motor_command(i, DShot_cmd_spin_direction_normal, true);
+
+			} else if (_trtl_frame.action == turtle::Action::THROTTLE) {
+				up_dshot_motor_data_set(i, _trtl_frame.level, false);
+
+			} else {
+				up_dshot_motor_command(i, DShot_cmd_motor_stop, false);
+			}
+		}
+
+		up_dshot_trigger();
+		return true;
+	}
+
+	if (_trtl_fallback) {
+		// Fallback tick from Run(): never manufacture normal/test/flight values.
+		return false;
+	}
+
+	// ---- end turtle recovery -----------------------------------------------
+
 	int requested_telemetry_index = -1;
 
 	if (_telemetry) {
@@ -460,6 +519,235 @@ uint16_t DShot::convert_output_to_3d_scaling(uint16_t output)
 	return output;
 }
 
+void DShot::update_turtle_parameters()
+{
+	using namespace turtle;
+	const uint64_t now = hrt_absolute_time();
+
+	// Parameters are read at 4 Hz at most; never during a motor burst.
+	if (_trtl_last_params && now >= _trtl_last_params && now - _trtl_last_params < 250_ms) { return; }
+
+	_trtl_last_params = now;
+
+	if (_trtl_enable_handle == PARAM_INVALID) { _trtl_enable_handle = param_find("TRTL_EN"); }
+
+	int32_t requested = 0;
+
+	if (_trtl_enable_handle != PARAM_INVALID && param_get(_trtl_enable_handle, &requested) == PX4_OK) {
+		_trtl_requested = requested != 0;
+	}
+
+	// Accept changes only while idle, disarmed, and (once loaded) with the switch OFF.
+	// The snapshot is frozen for the whole recovery including direction restoration.
+	if (_trtl_core.busy() || interlock().owner() == Owner::FLIGHT) { return; }
+
+	if (!fresh(now, _trtl_status.timestamp, 750_ms) || !fresh(now, _trtl_armed.timestamp, 750_ms)
+	    || _trtl_status.arming_state != vehicle_status_s::ARMING_STATE_DISARMED
+	    || _trtl_armed.armed || _mixing_output.armed().armed) {
+		return;
+	}
+
+	if (_trtl_loaded && !_trtl_input.switch_off) { return; }
+
+	static const char *const names[TRTL_PARAM_COUNT] = {
+		"TRTL_EN", "TRTL_ESC", "TRTL_CH", "TRTL_POL",
+		"TRTL_ANGLE", "TRTL_EXIT", "TRTL_MIN", "TRTL_MAX", "TRTL_RAMP", "TRTL_TIME",
+		"TRTL_PRE", "TRTL_POST", "TRTL_SETTLE", "TRTL_COOL", "TRTL_DB", "TRTL_PWR", "TRTL_HOLD",
+		"TRTL_FL", "TRTL_FR", "TRTL_RL", "TRTL_RR", "CA_ROTOR_COUNT"
+	};
+
+	if (!_trtl_handles_initialized) {
+		for (auto &h : _trtl_handles) { h = PARAM_INVALID; }
+
+		_trtl_handles_initialized = true;
+	}
+
+	int32_t v[TRTL_PARAM_COUNT] {};
+
+	for (unsigned i = 0; i < TRTL_PARAM_COUNT; ++i) {
+		if (_trtl_handles[i] == PARAM_INVALID) { _trtl_handles[i] = param_find(names[i]); }
+
+		if (_trtl_handles[i] == PARAM_INVALID || param_get(_trtl_handles[i], &v[i]) != PX4_OK) {
+			_trtl_loaded = false;
+			_trtl_core.invalidate();
+			return;
+		}
+	}
+
+	Config c;
+	c.enabled = v[0];
+	c.esc = v[1];
+	c.channel = v[2];
+	c.polarity = v[3];
+	c.entry_deg = v[4];
+	c.exit_deg = v[5];
+	c.start = v[6];
+	c.peak = v[7];
+	c.ramp_ms = v[8];
+	c.drive_ms = v[9];
+	c.pre_ms = v[10];
+	c.post_ms = v[11];
+	c.settle_ms = v[12];
+	c.cooldown_ms = v[13];
+	c.deadband_pct = v[14];
+	c.proportional = v[15];
+	c.hold_ms = v[16];
+
+	turtle_mapping::Config corners;
+
+	for (unsigned i = 0; i < 4; ++i) { corners.motor[i] = v[17 + i]; }
+
+	int32_t functions[MAX_ACTUATORS] {};
+	static_assert(MAX_ACTUATORS <= 32, "turtle output mask too narrow");
+
+	for (unsigned i = 0; i < MAX_ACTUATORS; ++i) {
+		functions[i] = static_cast<int32_t>(_mixing_output.outputFunction(i));
+	}
+
+	const auto resolved = turtle_mapping::resolve(corners, functions, MAX_ACTUATORS, _output_mask);
+	c.outputs = resolved.all;
+	_trtl_geometry_ok = v[21] == 4 && resolved.valid();
+
+	// Validate the allocator geometry of each corner, not only the rotor count.
+	static const char *const suffix[] = {"PX", "PY", "AX", "AY", "AZ"};
+
+	for (unsigned i = 0; i < 4 && _trtl_geometry_ok; ++i) {
+		float geom[5] {};
+
+		for (unsigned j = 0; j < 5; ++j) {
+			char name[24];
+			snprintf(name, sizeof(name), "CA_ROTOR%ld_%s", long(corners.motor[i] - 1), suffix[j]);
+			const param_t p = param_find(name);
+
+			if (p == PARAM_INVALID || param_get(p, &geom[j]) != PX4_OK) { _trtl_geometry_ok = false; break; }
+		}
+
+		_trtl_geometry_ok = _trtl_geometry_ok && quad_corner(i, geom[0], geom[1], geom[2], geom[3], geom[4]);
+
+		char tilt_name[32];
+		snprintf(tilt_name, sizeof(tilt_name), "CA_ROTOR%ld_TILT", long(corners.motor[i] - 1));
+		const param_t tilt_handle = param_find(tilt_name);
+		int32_t tilt = 0;
+
+		if (tilt_handle == PARAM_INVALID || param_get(tilt_handle, &tilt) != PX4_OK || tilt != 0) {
+			_trtl_geometry_ok = false;
+		}
+	}
+
+	_trtl_rc_conflict = rc_conflict(_trtl_rc_channels.function,
+					sizeof(_trtl_rc_channels.function) / sizeof(_trtl_rc_channels.function[0]), c.channel);
+
+	// Mode selection may be configured outside rc_channels.function.
+	static const char *const mode_names[] = {"RC_MAP_FLTMODE", "RC_MAP_MODE_SW", "RC_MAP_FLTBTN"};
+
+	for (const auto name : mode_names) {
+		const param_t p = param_find(name);
+		int32_t ch = 0;
+
+		if (p != PARAM_INVALID && param_get(p, &ch) == PX4_OK && ch == c.channel) { _trtl_rc_conflict = true; }
+	}
+
+	const bool raw_ok = rc::healthy(now, _trtl_rc_channels.timestamp, _trtl_rc_channels.timestamp_last_valid,
+					_trtl_rc_channels.signal_lost);
+	const float raw = raw_ok ? rc::select(_trtl_rc_channels.channels, _trtl_rc_channels.channel_count, c.channel) : NAN;
+
+	// Only latch a new snapshot with the switch clearly OFF.
+	if (!std::isfinite(raw) || raw * float(c.polarity) >= -0.3f) { return; }
+
+	_trtl_loaded = false;
+
+	if (!resolved.valid() || !_trtl_geometry_ok || _trtl_rc_conflict || !c.valid()) {
+		_trtl_core.invalidate();
+		return;
+	}
+
+	// A changed mapping invalidates synchronisation even if the same output bits are reused.
+	if (_trtl_core.configured() && !turtle_mapping::same(_trtl_map, resolved)) { _trtl_core.invalidate(); }
+
+	_trtl_config = c;
+	_trtl_map_config = corners;
+	_trtl_map = resolved;
+	_trtl_loaded = _trtl_core.configure(c);
+}
+
+void DShot::update_turtle_inputs()
+{
+	using namespace turtle;
+
+	if (_trtl_manual_sub.updated()) { _trtl_manual_sub.copy(&_trtl_manual); }
+
+	if (_trtl_status_sub.updated()) { _trtl_status_sub.copy(&_trtl_status); }
+
+	if (_trtl_armed_sub.updated()) { _trtl_armed_sub.copy(&_trtl_armed); }
+
+	if (_trtl_att_sub.updated()) { _trtl_att_sub.copy(&_trtl_att); }
+
+	if (_trtl_rc_sub.updated()) { _trtl_rc_sub.copy(&_trtl_rc_channels); }
+
+	const uint64_t now = hrt_absolute_time();
+	Input in;
+
+	const bool state_fresh = fresh(now, _trtl_status.timestamp, 750_ms) && fresh(now, _trtl_armed.timestamp, 750_ms);
+	in.disarmed = state_fresh && _trtl_status.arming_state == vehicle_status_s::ARMING_STATE_DISARMED
+		      && !_trtl_armed.armed && !_mixing_output.armed().armed;
+
+	const auto &a = _mixing_output.armed();
+	in.hardware_ok = state_fresh && !_trtl_armed.lockdown && !_trtl_armed.kill
+			 && !_trtl_armed.termination && !_trtl_armed.in_esc_calibration_mode
+			 && !a.lockdown && !a.kill && !a.termination && !a.in_esc_calibration_mode
+			 && (!_trtl_status.safety_button_available || _trtl_status.safety_off)
+			 && !_trtl_status.calibration_enabled && !_trtl_status.rc_calibration_in_progress
+			 && !_trtl_status.failsafe && !_mixing_output.isActuatorTestRunning() && !_current_command.valid();
+
+	int32_t functions[MAX_ACTUATORS] {};
+
+	for (unsigned i = 0; i < MAX_ACTUATORS; ++i) {
+		functions[i] = static_cast<int32_t>(_mixing_output.outputFunction(i));
+	}
+
+	const auto current = turtle_mapping::resolve(_trtl_map_config, functions, MAX_ACTUATORS, _output_mask);
+	_trtl_map_ok = _trtl_loaded && _trtl_geometry_ok && turtle_mapping::same(current, _trtl_map)
+		       && !_trtl_status.is_vtol && _trtl_status.vehicle_type == vehicle_status_s::VEHICLE_TYPE_ROTARY_WING
+		       && !_param_dshot_3d_enable.get() && !_reversible_outputs;
+	in.mapping_ok = _trtl_map_ok;
+
+	const bool raw_ok = rc::healthy(now, _trtl_rc_channels.timestamp, _trtl_rc_channels.timestamp_last_valid,
+					_trtl_rc_channels.signal_lost);
+	const bool conflict = rc_conflict(_trtl_rc_channels.function,
+					  sizeof(_trtl_rc_channels.function) / sizeof(_trtl_rc_channels.function[0]),
+					  _trtl_config.channel);
+	in.rc_ok = raw_ok && !conflict && !_trtl_rc_conflict && fresh(now, _trtl_manual.timestamp, 300_ms)
+		   && fresh(now, _trtl_manual.timestamp_sample, 300_ms) && _trtl_manual.valid
+		   && _trtl_manual.data_source == manual_control_setpoint_s::SOURCE_RC;
+
+	const float raw = raw_ok ? rc::select(_trtl_rc_channels.channels, _trtl_rc_channels.channel_count,
+					      _trtl_config.channel) : NAN;
+	const float sw = raw * float(_trtl_config.polarity);
+	in.switch_on = in.rc_ok && std::isfinite(sw) && sw > 0.7f;
+	// Centre is neither ON nor a valid OFF reset; an ambiguous switch stops a burst.
+	in.switch_off = in.rc_ok && std::isfinite(sw) && sw < -0.3f;
+	in.throttle_low = in.rc_ok && std::isfinite(_trtl_manual.throttle) && _trtl_manual.throttle < -0.85f;
+	in.vertical = vertical(_trtl_att.q);
+	in.attitude_ok = fresh(now, _trtl_att.timestamp, 300_ms) && std::isfinite(in.vertical);
+
+	const float roll = _trtl_manual.roll, pitch = _trtl_manual.pitch;
+	const bool sticks = std::isfinite(roll) && std::isfinite(pitch) && std::fabs(roll) <= 1.05f && std::fabs(pitch) <= 1.05f;
+
+	if (sticks) {
+		in.selected = turtle_mapping::select(_trtl_map, roll, pitch, float(_trtl_config.deadband_pct) * 0.01f);
+		const float roll_magnitude = std::fabs(roll);
+		const float pitch_magnitude = std::fabs(pitch);
+		in.strength = (roll_magnitude > pitch_magnitude) ? roll_magnitude : pitch_magnitude;
+
+		if (in.strength > 1.f) { in.strength = 1.f; }
+
+	} else {
+		in.rc_ok = false;
+	}
+
+	_trtl_input = in;
+}
+
 void DShot::Run()
 {
 	if (should_exit()) {
@@ -472,7 +760,24 @@ void DShot::Run()
 
 	perf_begin(_cycle_perf);
 
+	update_turtle_parameters();
+	update_turtle_inputs();
+	_trtl_output_seen = false;
+
 	_mixing_output.update();
+
+	// Turtle recovery needs a steady output cadence even if the mixer did not
+	// call updateOutputs() this cycle (e.g. no fresh actuator topic while disarmed).
+	if (!_trtl_output_seen && (_trtl_requested || _trtl_core.owns_outputs()) && _outputs_on) {
+		uint16_t turtle_zero[MAX_ACTUATORS] {};
+		_trtl_fallback = true;
+		updateOutputs(turtle_zero, MAX_ACTUATORS, 0);
+		_trtl_fallback = false;
+	}
+
+	if (_trtl_requested || _trtl_core.owns_outputs()) {
+		ScheduleDelayed(10_ms);
+	}
 
 	// update output status if armed or if mixer is loaded
 	bool outputs_on = true;
@@ -637,6 +942,11 @@ void DShot::update_params()
 
 int DShot::custom_command(int argc, char *argv[])
 {
+	if (turtle::interlock().recovery_owned()) {
+		PX4_WARN("DShot command denied during turtle recovery/restoration");
+		return PX4_ERROR;
+	}
+
 	const char *verb = argv[0];
 
 	int motor_index = -1; // select motor index, default: -1=all
@@ -724,6 +1034,28 @@ int DShot::print_status()
 	PX4_INFO("Outputs used: 0x%" PRIx32, _output_mask);
 	PX4_INFO("Outputs on: %s", _outputs_on ? "yes" : "no");
 	PX4_INFO("3D mode parameter (DSHOT_3D_ENABLE): %s", _param_dshot_3d_enable.get() ? "enabled" : "disabled");
+
+	PX4_INFO("Turtle: requested=%d configured=%d enabled=%d synced=%d phase=%s reason=%s",
+		 (int)_trtl_requested, (int)_trtl_loaded, (int)_trtl_core.enabled(), (int)_trtl_core.synced(),
+		 turtle::phase_name(_trtl_core.phase), turtle::reason_name(_trtl_core.reason));
+	PX4_INFO("Turtle: map=%d geometry=%d rc_conflict=%d owner=%u ready=%d",
+		 (int)_trtl_map_ok, (int)_trtl_geometry_ok, (int)_trtl_rc_conflict,
+		 (unsigned)turtle::interlock().owner(), (int)turtle::interlock().ready());
+	PX4_INFO("Turtle: outputs FL=%u FR=%u RL=%u RR=%u CH=%ld POL=%ld",
+		 turtle_mapping::output_number(_trtl_map.corner[0]), turtle_mapping::output_number(_trtl_map.corner[1]),
+		 turtle_mapping::output_number(_trtl_map.corner[2]), turtle_mapping::output_number(_trtl_map.corner[3]),
+		 long(_trtl_config.channel), long(_trtl_config.polarity));
+	PX4_INFO("Turtle: entry=%ld exit=%ld start=%ld peak=%ld ramp=%ld drive=%ld",
+		 long(_trtl_config.entry_deg), long(_trtl_config.exit_deg), long(_trtl_config.start),
+		 long(_trtl_config.peak), long(_trtl_config.ramp_ms), long(_trtl_config.drive_ms));
+	PX4_INFO("Turtle: attempts=%u restores_sent=%u reverse_frames=%u restore_frames=%u throttle_frames=%u last_drive_ms=%u",
+		 (unsigned)_trtl_core.attempts, (unsigned)_trtl_core.restore_sequences_sent, (unsigned)_trtl_core.reverse_frames,
+		 (unsigned)_trtl_core.restore_frames, (unsigned)_trtl_core.throttle_frames, (unsigned)_trtl_core.last_drive_ms);
+	PX4_INFO("Turtle: rc=%d on=%d off=%d thr_low=%d disarmed=%d hardware=%d vertical=%.3f selected=0x%x level=%u",
+		 (int)_trtl_input.rc_ok, (int)_trtl_input.switch_on, (int)_trtl_input.switch_off, (int)_trtl_input.throttle_low,
+		 (int)_trtl_input.disarmed, (int)_trtl_input.hardware_ok, (double)_trtl_input.vertical,
+		 (unsigned)_trtl_frame.outputs, (unsigned)_trtl_frame.level);
+
 	perf_print_counter(_cycle_perf);
 	perf_print_counter(_bdshot_rpm_perf);
 	perf_print_counter(_dshot_telem_perf);

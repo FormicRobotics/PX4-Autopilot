@@ -39,6 +39,8 @@
  */
 
 #include "Commander.hpp"
+#include <lib/turtle_recovery/ArmingInterlock.hpp>
+#include <parameters/param.h>
 
 /* commander module headers */
 #include "Arming/ArmAuthorization/ArmAuthorization.h"
@@ -548,6 +550,24 @@ static constexpr const char *arm_disarm_reason_str(arm_disarm_reason_t calling_r
 
 transition_result_t Commander::arm(arm_disarm_reason_t calling_reason, bool run_preflight_checks)
 {
+	// Turtle recovery: mutual exclusion with DShot direction reversal/restoration.
+	// With TRTL_EN set, arming additionally requires the recovery controller to
+	// have completed its startup direction normalisation (interlock "ready").
+	int32_t turtle_enabled = 0;
+	const param_t turtle_enable_handle = param_find("TRTL_EN");
+
+	if (turtle_enable_handle != PARAM_INVALID) { param_get(turtle_enable_handle, &turtle_enabled); }
+
+	turtle::ArmGuard turtle_arm_guard(_vehicle_status.arming_state, vehicle_status_s::ARMING_STATE_ARMED,
+					  turtle_enabled != 0);
+
+	if (!turtle_arm_guard.allowed()) {
+		mavlink_log_critical(&_mavlink_log_pub, "Arming denied: turtle recovery active or not ready\t");
+		events::send(events::ID("commander_arm_denied_turtle"), {events::Log::Critical, events::LogInternal::Info},
+			     "Arming denied: turtle recovery active or not ready");
+		return TRANSITION_DENIED;
+	}
+
 	if (isArmed()) {
 		return TRANSITION_NOT_CHANGED;
 	}
@@ -642,6 +662,9 @@ transition_result_t Commander::arm(arm_disarm_reason_t calling_reason, bool run_
 
 transition_result_t Commander::disarm(arm_disarm_reason_t calling_reason, bool forced)
 {
+	// Turtle recovery: release FLIGHT ownership of the outputs once disarmed.
+	turtle::DisarmGuard turtle_disarm_guard(_vehicle_status.arming_state, vehicle_status_s::ARMING_STATE_ARMED);
+
 	if (!isArmed()) {
 		return TRANSITION_NOT_CHANGED;
 	}

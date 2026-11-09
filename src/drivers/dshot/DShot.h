@@ -42,6 +42,18 @@
 
 #include "DShotTelemetry.h"
 
+// Turtle (crash-flip) recovery: disarmed-only motor reversal via DShot 20/21
+#include <lib/turtle_recovery/TurtleCore.hpp>
+#include <lib/turtle_recovery/TurtleMapping.hpp>
+#include <lib/turtle_recovery/TurtleHelpers.hpp>
+#include <parameters/param.h>
+#include <uORB/Subscription.hpp>
+#include <uORB/topics/actuator_armed.h>
+#include <uORB/topics/manual_control_setpoint.h>
+#include <uORB/topics/rc_channels.h>
+#include <uORB/topics/vehicle_attitude.h>
+#include <uORB/topics/vehicle_status.h>
+
 using namespace time_literals;
 
 #if !defined(DIRECT_PWM_OUTPUT_CHANNELS)
@@ -139,8 +151,46 @@ private:
 
 	uint16_t convert_output_to_3d_scaling(uint16_t output);
 
+	/**
+	 * Turtle recovery: refresh the TRTL_* parameter snapshot (4 Hz, only while
+	 * idle, disarmed and switch OFF) and the gated inputs for the controller.
+	 */
+	void update_turtle_parameters();
+	void update_turtle_inputs();
+
 	MixingOutput _mixing_output{PARAM_PREFIX, DIRECT_PWM_OUTPUT_CHANNELS, *this, MixingOutput::SchedulingPolicy::Auto, false, false};
 	uint32_t _reversible_outputs{};
+
+	// Turtle recovery controller state (see lib/turtle_recovery)
+	turtle::Core _trtl_core{turtle::interlock()};
+	turtle::Config _trtl_config{};
+	turtle::Input _trtl_input{};
+	turtle::Frame _trtl_frame{};
+	turtle_mapping::Config _trtl_map_config{};
+	turtle_mapping::Resolved _trtl_map{};
+	bool _trtl_loaded{false};
+	bool _trtl_map_ok{false};
+	bool _trtl_geometry_ok{false};
+	bool _trtl_rc_conflict{true};
+	bool _trtl_output_seen{false};
+	bool _trtl_fallback{false};
+	bool _trtl_requested{false};
+	uint64_t _trtl_last_params{0};
+	static constexpr unsigned TRTL_PARAM_COUNT = 22;
+	param_t _trtl_handles[TRTL_PARAM_COUNT] {};
+	bool _trtl_handles_initialized{false};
+	param_t _trtl_enable_handle{PARAM_INVALID};
+
+	uORB::Subscription _trtl_manual_sub{ORB_ID(manual_control_setpoint)};
+	uORB::Subscription _trtl_status_sub{ORB_ID(vehicle_status)};
+	uORB::Subscription _trtl_armed_sub{ORB_ID(actuator_armed)};
+	uORB::Subscription _trtl_att_sub{ORB_ID(vehicle_attitude)};
+	uORB::Subscription _trtl_rc_sub{ORB_ID(rc_channels)};
+	manual_control_setpoint_s _trtl_manual{};
+	vehicle_status_s _trtl_status{};
+	actuator_armed_s _trtl_armed{};
+	vehicle_attitude_s _trtl_att{};
+	rc_channels_s _trtl_rc_channels{};
 
 	DShotTelemetry *_telemetry{nullptr};
 
