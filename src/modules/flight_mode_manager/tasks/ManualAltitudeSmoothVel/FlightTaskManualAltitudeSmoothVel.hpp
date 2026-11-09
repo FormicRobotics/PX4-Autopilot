@@ -60,8 +60,6 @@ protected:
 	void _updateTrajConstraints();
 	void _setOutputState();
 
-	bool _formic_vio_mode{false}; ///< FORMIC_EST_MODE 1: a height reset is a frame shift at an estimator handover
-
 	ManualVelocitySmoothingZ _smoothing; ///< Smoothing in z direction
 
 	DEFINE_PARAMETERS_CUSTOM_PARENT(FlightTaskManualAltitude,

@@ -155,8 +155,6 @@ void FlightModeManager::start_flight_task()
 	bool task_failure = false;
 	const bool nav_state_descend = (_vehicle_status_sub.get().nav_state == vehicle_status_s::NAVIGATION_STATE_DESCEND);
 
-	const bool nav_state_formic_alt_hold = (_vehicle_status_sub.get().nav_state == vehicle_status_s::NAVIGATION_STATE_FORMIC_ALT_HOLD);
-
 	// Follow me
 	if (_vehicle_status_sub.get().nav_state == vehicle_status_s::NAVIGATION_STATE_AUTO_FOLLOW_TARGET) {
 		found_some_task = true;
@@ -232,8 +230,8 @@ void FlightModeManager::start_flight_task()
 		matching_task_running = matching_task_running && !task_failure;
 	}
 
-	// Manual altitude control (includes FormicAltHold mode)
-	if ((_vehicle_status_sub.get().nav_state == vehicle_status_s::NAVIGATION_STATE_ALTCTL) || nav_state_formic_alt_hold || task_failure) {
+	// Manual altitude control
+	if ((_vehicle_status_sub.get().nav_state == vehicle_status_s::NAVIGATION_STATE_ALTCTL) || task_failure) {
 		found_some_task = true;
 		FlightTaskError error = FlightTaskError::NoError;
 
@@ -250,9 +248,7 @@ void FlightModeManager::start_flight_task()
 				_param_mpc_pos_mode.commit();
 			}
 
-			const FlightTaskIndex altitude_task = nav_state_formic_alt_hold ? FlightTaskIndex::FormicAltHold : FlightTaskIndex::ManualAltitudeSmoothVel;
-			error = switchTask(altitude_task);
-
+			error = switchTask(FlightTaskIndex::ManualAltitudeSmoothVel);
 			break;
 		}
 

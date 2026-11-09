@@ -32,7 +32,6 @@
 ############################################################################
 
 px4_add_library(FlightTaskUtility
-	auxReader.cpp
 	StickAccelerationXY.cpp
 	StickTiltXY.cpp
 	Gimbal.cpp

@@ -45,10 +45,6 @@ bool FlightTaskManualAltitudeSmoothVel::activate(const trajectory_setpoint_s &la
 {
 	bool ret = FlightTaskManualAltitude::activate(last_setpoint);
 
-	int32_t formic_est_mode = 0;
-	param_get(param_find("FORMIC_EST_MODE"), &formic_est_mode);
-	_formic_vio_mode = (formic_est_mode == 1);
-
 	// Check if the previous FlightTask provided setpoints
 
 	// If the position setpoint is unknown, set to the current postion
@@ -67,18 +63,6 @@ bool FlightTaskManualAltitudeSmoothVel::activate(const trajectory_setpoint_s &la
 
 void FlightTaskManualAltitudeSmoothVel::_ekfResetHandlerPositionZ(float delta_z)
 {
-	// FORMIC_EST_MODE 1: a handover back to the VIO frame steps the height. The held height moves with it, so
-	// the height error stays and the drone does not climb or sink by the step.
-	if (_formic_vio_mode && PX4_ISFINITE(delta_z)) {
-		_smoothing.shiftPosition(delta_z);
-
-		if (PX4_ISFINITE(_position_setpoint(2))) {
-			_position_setpoint(2) += delta_z;
-		}
-
-		return;
-	}
-
 	_smoothing.setCurrentPosition(_position(2));
 }
 
