@@ -39,9 +39,10 @@
 
 using namespace time_literals;
 
-ModuleBase::Descriptor CrsfRc::desc{task_spawn, custom_command, print_usage};
-
 #define CRSF_BAUDRATE 420000
+
+// MAV_CMD_START_RX_PAIR param1 (RC type): 0 = Spektrum, 1 = CRSF
+static constexpr int RC_TYPE_CRSF = 1;
 
 CrsfRc::CrsfRc(const char *device) :
 	ModuleParams(nullptr),
@@ -106,8 +107,8 @@ int CrsfRc::task_spawn(int argc, char *argv[])
 		return PX4_ERROR;
 	}
 
-	desc.object.store(instance);
-	desc.task_id = task_id_is_work_queue;
+	_object.store(instance);
+	_task_id = task_id_is_work_queue;
 
 	instance->ScheduleNow();
 
@@ -125,7 +126,7 @@ void CrsfRc::Run()
 			_uart = nullptr;
 		}
 
-		exit_and_cleanup(desc);
+		exit_and_cleanup();
 		return;
 	}
 
@@ -178,8 +179,6 @@ void CrsfRc::Run()
 		_input_rc.rssi = -1;
 		_input_rc.rssi_dbm = NAN;
 		_input_rc.link_quality = -1;
-		_input_rc.rc_frame_rate = 0;
-		_input_rc.link_snr = -1;
 
 		CrsfParser_Init();
 	}
@@ -199,7 +198,7 @@ void CrsfRc::Run()
 			uint8_t cmd_ret = vehicle_command_ack_s::VEHICLE_CMD_RESULT_UNSUPPORTED;
 
 			if (!_is_singlewire && !_armed) {
-				if ((int)vcmd.param1 == vehicle_command_s::RC_TYPE_CRSF) {
+				if ((int)vcmd.param1 == RC_TYPE_CRSF) {
 					if (BindCRSF()) {
 						cmd_ret = vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED;
 					}
@@ -257,8 +256,6 @@ void CrsfRc::Run()
 				}
 
 				_input_rc.link_quality = new_crsf_packet.link_statistics.uplink_link_quality;
-				_input_rc.rc_frame_rate = new_crsf_packet.link_statistics.rf_mode;
-				_input_rc.link_snr = new_crsf_packet.link_statistics.uplink_snr;
 				break;
 
 			case CRSF_MESSAGE_TYPE_LINK_STATISTICS_TX:
@@ -402,8 +399,6 @@ void CrsfRc::Run()
 		_input_rc.rssi = -1;
 		_input_rc.rssi_dbm = NAN;
 		_input_rc.link_quality = -1;
-		_input_rc.rc_frame_rate = 0;
-		_input_rc.link_snr = -1;
 	}
 
 	// If we have not gotten RC updates specifically
@@ -596,7 +591,7 @@ int CrsfRc::custom_command(int argc, char *argv[])
 		uORB::Publication<vehicle_command_s> vehicle_command_pub{ORB_ID(vehicle_command)};
 		vehicle_command_s vcmd{};
 		vcmd.command = vehicle_command_s::VEHICLE_CMD_START_RX_PAIR;
-		vcmd.param1 = vehicle_command_s::RC_TYPE_CRSF;
+		vcmd.param1 = RC_TYPE_CRSF;
 		vcmd.timestamp = hrt_absolute_time();
 		vehicle_command_pub.publish(vcmd);
 		return 0;
@@ -605,7 +600,7 @@ int CrsfRc::custom_command(int argc, char *argv[])
 #ifdef CONFIG_RC_CRSF_INJECT
 
 	if (!strcmp(argv[0], "start")) {
-		if (is_running(desc)) {
+		if (is_running()) {
 			return print_usage("already running");
 		}
 
@@ -616,7 +611,7 @@ int CrsfRc::custom_command(int argc, char *argv[])
 		}
 	}
 
-	if (!is_running(desc)) {
+	if (!is_running()) {
 		return print_usage("not running");
 	}
 
@@ -670,5 +665,5 @@ This module parses the CRSF RC uplink protocol and generates CRSF downlink telem
 
 extern "C" __EXPORT int crsf_rc_main(int argc, char *argv[])
 {
-	return ModuleBase::main(CrsfRc::desc, argc, argv);
+	return CrsfRc::main(argc, argv);
 }

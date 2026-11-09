@@ -58,11 +58,9 @@
 
 using namespace device;
 
-class CrsfRc : public ModuleBase, public ModuleParams, public px4::ScheduledWorkItem
+class CrsfRc : public ModuleBase<CrsfRc>, public ModuleParams, public px4::ScheduledWorkItem
 {
 public:
-	static Descriptor desc;
-
 	CrsfRc(const char *device);
 	~CrsfRc() override;
 

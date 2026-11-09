@@ -35,9 +35,11 @@
 #define FORMIC_EV_FLAG_HPP
 
 #include <uORB/topics/formic_ev_flag.h>
+#include <uORB/topics/dds_flag.h>
 
 // Sent as NAMED_VALUE_INT "FEV_FLAG":
-// bit0 ev_data_arrived, bit1 ekfs_converged, bit2 heading_ok, bit3 pos_ok, bits8-15 dstate
+// bit0 ev_data_arrived, bit1 ekfs_converged, bit2 heading_ok, bit3 pos_ok,
+// bit4 dds_connected (from dds_flag, same source as the msp_osd "FORMIC:V/X" ring), bits8-15 dstate
 class MavlinkStreamFormicEvFlag : public MavlinkStream
 {
 public:
@@ -58,6 +60,7 @@ private:
 	explicit MavlinkStreamFormicEvFlag(Mavlink *mavlink) : MavlinkStream(mavlink) {}
 
 	uORB::Subscription _formic_ev_flag_sub{ORB_ID(formic_ev_flag)};
+	uORB::Subscription _dds_flag_sub{ORB_ID(dds_flag)};
 	int32_t _last_value{-1};
 
 	bool send() override
@@ -70,12 +73,18 @@ private:
 			// only VisionON (1) and DEGRADED (2) are reported, DR (3) is sent as NONE (0)
 			const uint8_t dstate = (flag.dstate == 1 || flag.dstate == 2) ? flag.dstate : 0;
 
+			// dds_flag is published on connect/disconnect only: copy() keeps the last value,
+			// and an uninitialised struct (never published) reads as not connected.
+			dds_flag_s dds_flag{};
+			_dds_flag_sub.copy(&dds_flag);
+
 			msg.time_boot_ms = flag.timestamp / 1000ULL;
 			strncpy(msg.name, "FEV_FLAG", sizeof(msg.name));
 			msg.value = (flag.ev_data_arrived ? (1 << 0) : 0)
 				    | (flag.ekfs_converged ? (1 << 1) : 0)
 				    | (flag.heading_ok ? (1 << 2) : 0)
 				    | (flag.pos_ok ? (1 << 3) : 0)
+				    | (dds_flag.dds_connected ? (1 << 4) : 0)
 				    | (static_cast<int32_t>(dstate) << 8);
 
 			mavlink_msg_named_value_int_send_struct(_mavlink->get_channel(), &msg);
