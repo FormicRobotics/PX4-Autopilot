@@ -9,6 +9,8 @@ uint32 device_id		# the gyro (formic_gyro_batch) or accel (formic_accel_batch) t
 
 float32 scale			# value = raw * scale: rad/s (gyro) or m/s^2 (accel)
 
+float32 temperature		# sensor temperature (degrees Celsius) at publication, from the driver's sensor_gyro / sensor_accel of device_id; NaN when unknown
+
 uint8 samples			# number of valid samples
 uint8 MAX_SAMPLES = 32
 

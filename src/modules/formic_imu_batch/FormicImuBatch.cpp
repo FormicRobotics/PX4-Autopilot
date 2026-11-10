@@ -22,22 +22,34 @@ bool FormicImuBatch::init()
 	return true;
 }
 
-template<typename T>
-int FormicImuBatch::findInstance(uORB::SubscriptionCallbackWorkItem (&subs)[MAX_INSTANCES], uint32_t device_id)
+template<typename T, typename S>
+int FormicImuBatch::findInstance(S (&subs)[MAX_INSTANCES], uint32_t device_id)
 {
 	if (device_id == 0) {
 		return NONE;
 	}
 
 	for (int i = 0; i < MAX_INSTANCES; i++) {
-		T fifo;
+		T msg;
 
-		if (subs[i].copy(&fifo) && (fifo.device_id == device_id)) {
+		if (subs[i].copy(&msg) && (msg.device_id == device_id)) {
 			return i;
 		}
 	}
 
 	return NONE;
+}
+
+template<typename T>
+float FormicImuBatch::reportTemperature(uORB::Subscription (&subs)[MAX_INSTANCES], int instance, uint32_t device_id)
+{
+	T report;
+
+	if ((instance == NONE) || !subs[instance].copy(&report)) {
+		return NAN;
+	}
+
+	return formic_imu_batch::batchTemperature(device_id, report.device_id, report.temperature);
 }
 
 void FormicImuBatch::updateSelection()
@@ -48,11 +60,30 @@ void FormicImuBatch::updateSelection()
 		if (selection.gyro_device_id != _gyro_device_id) {
 			_gyro_device_id = selection.gyro_device_id;
 			_gyro_instance = NONE;
+			_gyro_report_instance = NONE;
 		}
 
 		if (selection.accel_device_id != _accel_device_id) {
 			_accel_device_id = selection.accel_device_id;
 			_accel_instance = NONE;
+			_accel_report_instance = NONE;
+		}
+	}
+
+	// the report instance of a device need not equal its FIFO instance
+	if (_gyro_report_instance == NONE) {
+		_gyro_report_instance = findInstance<sensor_gyro_s>(_gyro_sub, _gyro_device_id);
+
+		if (_gyro_report_instance != NONE) {
+			PX4_INFO("gyro %" PRIu32 ": sensor_gyro instance %d", _gyro_device_id, _gyro_report_instance);
+		}
+	}
+
+	if (_accel_report_instance == NONE) {
+		_accel_report_instance = findInstance<sensor_accel_s>(_accel_sub, _accel_device_id);
+
+		if (_accel_report_instance != NONE) {
+			PX4_INFO("accel %" PRIu32 ": sensor_accel instance %d", _accel_device_id, _accel_report_instance);
 		}
 	}
 
@@ -90,9 +121,11 @@ void FormicImuBatch::updateSelection()
 	}
 }
 
-void FormicImuBatch::publish(uORB::Publication<formic_imu_batch_s> &pub, const formic_imu_batch_s &batch)
+void FormicImuBatch::publish(uORB::Publication<formic_imu_batch_s> &pub, const formic_imu_batch_s &batch,
+			     float temperature)
 {
 	_out = batch;
+	_out.temperature = temperature;
 	_out.timestamp = hrt_absolute_time();
 	pub.publish(_out);
 }
@@ -134,7 +167,7 @@ void FormicImuBatch::Run()
 			generation = sub.get_last_generation();
 			_gyro_batcher.add(_gyro_fifo.timestamp_sample, _gyro_fifo.dt, _gyro_fifo.device_id, _gyro_fifo.scale,
 					  _gyro_fifo.samples, _gyro_fifo.x, _gyro_fifo.y, _gyro_fifo.z, [this](const formic_imu_batch_s & batch) {
-				publish(_gyro_batch_pub, batch);
+				publish(_gyro_batch_pub, batch, reportTemperature<sensor_gyro_s>(_gyro_sub, _gyro_report_instance, batch.device_id));
 				_accel_stagger_armed = true;
 			});
 		}
@@ -149,7 +182,7 @@ void FormicImuBatch::Run()
 			generation = sub.get_last_generation();
 			_accel_batcher.add(_accel_fifo.timestamp_sample, _accel_fifo.dt, _accel_fifo.device_id, _accel_fifo.scale,
 					   _accel_fifo.samples, _accel_fifo.x, _accel_fifo.y, _accel_fifo.z, [this](const formic_imu_batch_s & batch) {
-				publish(_accel_batch_pub, batch);
+				publish(_accel_batch_pub, batch, reportTemperature<sensor_accel_s>(_accel_sub, _accel_report_instance, batch.device_id));
 			});
 		}
 	}
@@ -159,7 +192,7 @@ void FormicImuBatch::Run()
 
 		if (_accel_batcher.pending() >= STAGGER_MIN_SAMPLES) {
 			_accel_batcher.flush([this](const formic_imu_batch_s & batch) {
-				publish(_accel_batch_pub, batch);
+				publish(_accel_batch_pub, batch, reportTemperature<sensor_accel_s>(_accel_sub, _accel_report_instance, batch.device_id));
 			});
 		}
 	}
@@ -218,7 +251,8 @@ int FormicImuBatch::print_usage(const char *reason)
 ### Description
 Every FIFO sample of the IMU EKF2 flies on, for the Jetson. Follows sensor_selection to the gyro and
 accel in use and publishes their sensor_gyro_fifo / sensor_accel_fifo samples in batches of up to 32
-on formic_gyro_batch and formic_accel_batch, each sample with its own time.
+on formic_gyro_batch and formic_accel_batch, each sample with its own time. Each batch carries the
+sensor temperature from the driver's sensor_gyro / sensor_accel.
 )DESCR_STR");
 
 	PRINT_MODULE_USAGE_NAME("formic_imu_batch", "system");
