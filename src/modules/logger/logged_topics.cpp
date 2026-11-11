@@ -68,12 +68,13 @@ void LoggedTopics::add_default_topics()
 	add_topic("failure_detector_status", 100);
 	add_topic("failsafe_flags");
 	// formic debuging 
-	add_topic("formic_vio_jetson");
 	add_topic("formic_odom");
 	add_topic("formic_pos_req");
 	add_topic("formic_ev_flag");
 	add_optional_topic("formic_vio_est_status", 50);
 	add_optional_topic("formic_ekf_vel_reset");
+	add_optional_topic("formic_control_state", 20);
+	add_optional_topic("vehicle_visual_odometry", 30);
 
 	add_optional_topic("follow_target", 500);
 	add_optional_topic("follow_target_estimator", 200);
@@ -205,6 +206,7 @@ void LoggedTopics::add_default_topics()
 	// FORMIC_EST_MODE 1: both instances (EKF2 0, formic_vio_est 1) in their own frames, to compare and replay handovers
 	add_optional_topic_multi("estimator_attitude", 20, 2);
 	add_optional_topic_multi("estimator_local_position", 20, 2);
+	add_optional_topic_multi("estimator_odometry", 20, 2);
 
 	// EV aid source status (only advertised when EKF2_EV_CTRL enables them)
 	add_optional_topic_multi("estimator_aid_src_ev_vel", 200);
