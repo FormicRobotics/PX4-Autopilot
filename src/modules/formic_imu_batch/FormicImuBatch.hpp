@@ -9,7 +9,9 @@
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionCallback.hpp>
 #include <uORB/topics/formic_imu_batch.h>
+#include <uORB/topics/sensor_accel.h>
 #include <uORB/topics/sensor_accel_fifo.h>
+#include <uORB/topics/sensor_gyro.h>
 #include <uORB/topics/sensor_gyro_fifo.h>
 #include <uORB/topics/sensor_selection.h>
 
@@ -22,7 +24,8 @@ using namespace time_literals;
  *
  * Follows sensor_selection to the gyro and accel in use, reads their sensor_gyro_fifo and
  * sensor_accel_fifo on every publication and publishes the samples in batches on
- * formic_gyro_batch and formic_accel_batch.
+ * formic_gyro_batch and formic_accel_batch. Each batch carries the sensor temperature from the
+ * newest sensor_gyro / sensor_accel of its device.
  */
 class FormicImuBatch : public ModuleBase<FormicImuBatch>, public px4::ScheduledWorkItem
 {
@@ -43,19 +46,24 @@ private:
 
 	void Run() override;
 
-	/// Follows sensor_selection: the FIFO instances of the gyro and accel in use.
+	/// Follows sensor_selection: the FIFO and report instances of the gyro and accel in use.
 	void updateSelection();
 
-	/// Publishes a batch, stamped now.
-	void publish(uORB::Publication<formic_imu_batch_s> &pub, const formic_imu_batch_s &batch);
+	/// Publishes a batch, stamped now, with `temperature` (degrees Celsius, NaN when unknown).
+	void publish(uORB::Publication<formic_imu_batch_s> &pub, const formic_imu_batch_s &batch, float temperature);
 
 	/// FIFO messages uORB dropped before this module read them (its queue overflowed): the jumps in the
 	/// subscription's generation. The first read after a change of instance is not counted.
 	static void countOverflow(unsigned generation_before, unsigned generation_after, bool &first, uint32_t &overflow);
 
-	/// The FIFO instance whose device_id is `device_id`, or NONE.
+	/// The instance of topic T (a FIFO or report topic) whose device_id is `device_id`, or NONE.
+	template<typename T, typename S>
+	static int findInstance(S (&subs)[MAX_INSTANCES], uint32_t device_id);
+
+	/// The temperature in the newest report T (sensor_gyro or sensor_accel) on `instance`, for a batch
+	/// of `device_id` (degrees Celsius); NaN when there is none.
 	template<typename T>
-	static int findInstance(uORB::SubscriptionCallbackWorkItem (&subs)[MAX_INSTANCES], uint32_t device_id);
+	static float reportTemperature(uORB::Subscription (&subs)[MAX_INSTANCES], int instance, uint32_t device_id);
 
 	uORB::Subscription _sensor_selection_sub{ORB_ID(sensor_selection)};
 
@@ -73,6 +81,21 @@ private:
 		{this, ORB_ID(sensor_accel_fifo), 3},
 	};
 
+	// the driver publishes these next to each FIFO message, with the sensor temperature
+	uORB::Subscription _gyro_sub[MAX_INSTANCES] {
+		{ORB_ID(sensor_gyro), 0},
+		{ORB_ID(sensor_gyro), 1},
+		{ORB_ID(sensor_gyro), 2},
+		{ORB_ID(sensor_gyro), 3},
+	};
+
+	uORB::Subscription _accel_sub[MAX_INSTANCES] {
+		{ORB_ID(sensor_accel), 0},
+		{ORB_ID(sensor_accel), 1},
+		{ORB_ID(sensor_accel), 2},
+		{ORB_ID(sensor_accel), 3},
+	};
+
 	uORB::Publication<formic_imu_batch_s> _gyro_batch_pub{ORB_ID(formic_gyro_batch)};
 	uORB::Publication<formic_imu_batch_s> _accel_batch_pub{ORB_ID(formic_accel_batch)};
 
@@ -83,6 +106,8 @@ private:
 	uint32_t _accel_device_id{0};
 	int _gyro_instance{NONE};
 	int _accel_instance{NONE};
+	int _gyro_report_instance{NONE};
+	int _accel_report_instance{NONE};
 	hrt_abstime _last_selection_check{0};
 
 	// The gyro and accel batches would fill on the same sample and reach the link back to back. The

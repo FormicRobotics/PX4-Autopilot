@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <vector>
 
 #include "SampleBatcher.hpp"
@@ -207,4 +208,36 @@ TEST(FormicImuBatch, FlushEmitsAPartBatch)
 	EXPECT_EQ(sink.batches[1].timestamp_sample, kStartUs + static_cast<uint64_t>(16 * kDtUs));
 	EXPECT_EQ(batcher.emitted(), 17u);
 	EXPECT_EQ(batcher.lost(), 0u);
+}
+
+// A batch leaves the batcher with temperature NaN, never 0 degC: the FIFO messages carry none, and the
+// module sets it at publication.
+TEST(FormicImuBatch, BatchTemperatureIsUnknownUntilSet)
+{
+	SampleBatcher batcher;
+	Sink sink;
+
+	for (int i = 0; i < 40; i++) {
+		addMessage(batcher, sink, kStartUs + static_cast<uint64_t>(i * kDtUs), 1, static_cast<int16_t>(i));
+	}
+
+	batcher.flush(sink);
+	ASSERT_EQ(sink.batches.size(), 2u);
+	EXPECT_TRUE(std::isnan(sink.batches[0].temperature));
+	EXPECT_TRUE(std::isnan(sink.batches[1].temperature));
+}
+
+// A batch takes the temperature of a report (sensor_gyro / sensor_accel) of its own device; another
+// device, no device or no valid reading give NaN.
+TEST(FormicImuBatch, TemperatureComesFromTheBatchDevice)
+{
+	using formic_imu_batch::batchTemperature;
+	constexpr uint32_t kOtherDevice = 2490386;
+
+	EXPECT_EQ(batchTemperature(kDevice, kDevice, 41.5f), 41.5f);
+	EXPECT_EQ(batchTemperature(kDevice, kDevice, -5.25f), -5.25f);
+	EXPECT_TRUE(std::isnan(batchTemperature(kDevice, kOtherDevice, 41.5f)));
+	EXPECT_TRUE(std::isnan(batchTemperature(0, 0, 41.5f)));
+	EXPECT_TRUE(std::isnan(batchTemperature(kDevice, kDevice, NAN)));	// BMI270 register invalid
+	EXPECT_TRUE(std::isnan(batchTemperature(kDevice, kDevice, INFINITY)));
 }

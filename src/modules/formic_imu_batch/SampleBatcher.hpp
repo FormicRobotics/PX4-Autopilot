@@ -12,6 +12,9 @@
  * A gap of more than 1.5 dt to the previous sample counts the samples missing in it; each batch
  * carries the count so far in samples_lost.
  *
+ * A batch leaves the batcher with temperature NaN: the FIFO messages carry none. The module sets it
+ * at publication from the driver's sensor_gyro / sensor_accel, through batchTemperature().
+ *
  * No uORB: tested with gtest.
  ****************************************************************************/
 
@@ -67,6 +70,7 @@ public:
 				_batch.timestamp_sample = t;
 				_batch.device_id = device_id;
 				_batch.scale = scale;
+				_batch.temperature = NAN;
 			}
 
 			const uint8_t k = _batch.samples;
@@ -127,5 +131,19 @@ private:
 	uint32_t _lost{0};
 	uint64_t _emitted{0};
 };
+
+/**
+ * The temperature for a batch of `batch_device_id` (degrees Celsius), from a driver report
+ * (sensor_gyro or sensor_accel) of `report_device_id`: NaN when the report is of another device,
+ * there is no device (0), or the driver has no valid reading (NaN).
+ */
+inline float batchTemperature(uint32_t batch_device_id, uint32_t report_device_id, float report_temperature)
+{
+	if ((batch_device_id == 0) || (report_device_id != batch_device_id) || !std::isfinite(report_temperature)) {
+		return NAN;
+	}
+
+	return report_temperature;
+}
 
 } // namespace formic_imu_batch
