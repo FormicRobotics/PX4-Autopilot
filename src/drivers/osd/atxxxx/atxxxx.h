@@ -49,7 +49,7 @@
 #include <px4_platform_common/i2c_spi_buses.h>
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/battery_status.h>
-#include <uORB/topics/formic_ev_flag.h>
+#include <uORB/topics/formic_vio_est_status.h>
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_status.h>
 
@@ -110,7 +110,7 @@ private:
 	uORB::Subscription _battery_sub{ORB_ID(battery_status)};
 	uORB::Subscription _local_position_sub{ORB_ID(vehicle_local_position)};
 	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
-	uORB::Subscription _formic_ev_flag_sub{ORB_ID(formic_ev_flag)};
+	uORB::Subscription _formic_vio_est_status_sub{ORB_ID(formic_vio_est_status)};
 
 	// battery
 	float _battery_voltage_v{0.f};
@@ -128,7 +128,7 @@ private:
 	// flight mode
 	uint8_t _nav_state{0};
 
-	// vision (VIO) state, formic_ev_flag.dstate
+	// vision (VIO) state: 0 none, 1 healthy, 2 degraded (formic_vio_est_status)
 	uint8_t _vision_state{0};
 
 	DEFINE_PARAMETERS(

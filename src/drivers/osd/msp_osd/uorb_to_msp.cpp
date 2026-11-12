@@ -778,33 +778,8 @@ msp_rendor_formic_vision_quality_t construct_rendor_FORMIC_VISION_QUALITY(const 
 	return vision_quality;
 }
 
-msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_ev_flag_s &formic_ev_flag)
-{
-	msp_rendor_formicc_vio_status_t vio_status = {};
-	vio_status.subCommand = MSP_DP_WRITE_STRING;
-	vio_status.screenYPosition = 0x0F;
-	vio_status.screenXPosition = 0x17;
-	vio_status.systemElement = 0x00; // Crosshairs system element ID (0x00 = CROSSHAIR)
-	vio_status.iconIndex = 0 ; // no icon
-
-	// Map Dstate (see formic_watchdog_ev.hpp) to a short label.
-	// The str buffer is 8 bytes, so labels must be <= 7 chars.
-	const char *label;
-
-	switch (formic_ev_flag.dstate) {
-	case 1:  label = "VIS-OK"; break; // Dstate::VisionON
-	case 2:  label = "DEGRAD"; break; // Dstate::DEGRADED
-	default: label = "";   break;
-	}
-
-	memset(&vio_status.str[0], 0, sizeof(vio_status.str));
-	snprintf(&vio_status.str[0], sizeof(vio_status.str), "%s", label);
-
-	return vio_status;
-}
-
 msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_vio_est_status_s &vio,
-		const vehicle_status_s &vehicle_status, const formic_pos_req_s &pos_req)
+		bool in_position, const formic_pos_req_s &pos_req)
 {
 	msp_rendor_formicc_vio_status_t vio_status = {};
 	vio_status.subCommand = MSP_DP_WRITE_STRING;
@@ -813,8 +788,6 @@ msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_
 	vio_status.systemElement = 0x00;
 	vio_status.iconIndex = 0;
 
-	const bool in_position = (vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_POSCTL)
-				 || (vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_POSITION_SLOW);
 	const bool degraded = (vio.vio_status == formic_vio_est_status_s::VIO_STATUS_DEGRADED);
 
 	// The str buffer is 8 bytes, so labels must be <= 7 chars.

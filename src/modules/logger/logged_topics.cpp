@@ -70,7 +70,6 @@ void LoggedTopics::add_default_topics()
 	// formic debuging 
 	add_topic("formic_odom");
 	add_topic("formic_pos_req");
-	add_topic("formic_ev_flag");
 	add_optional_topic("formic_vio_est_status", 50);
 	add_optional_topic("formic_ekf_vel_reset");
 	add_optional_topic("formic_control_state", 20);
@@ -168,7 +167,6 @@ void LoggedTopics::add_default_topics()
 	add_optional_topic("fixed_wing_lateral_status", 100);
 	add_optional_topic("fixed_wing_runway_control", 100);
 	add_topic("debug_flag", 10);
-	add_topic("formic_ev_flag", 10);
 	add_topic("formic_pos_req");
 
 	// multi topics
@@ -203,10 +201,18 @@ void LoggedTopics::add_default_topics()
 	add_optional_topic_multi("estimator_status_flags", 10);
 	add_optional_topic_multi("yaw_estimator_status", 1000);
 
-	// FORMIC_EST_MODE 1: both instances (EKF2 0, formic_vio_est 1) in their own frames, to compare and replay handovers
-	add_optional_topic_multi("estimator_attitude", 20, 2);
-	add_optional_topic_multi("estimator_local_position", 20, 2);
-	add_optional_topic_multi("estimator_odometry", 20, 2);
+	// Both instances (EKF2 0, formic_vio_est 1) in their own frames, to compare and replay handovers.
+	// Not optional: formic_vio_est advertises instance 1 only once EKF2 holds instance 0, which can be after the
+	// logger has started. An optional topic that does not exist yet is dropped for the whole boot.
+	{
+		static constexpr uint8_t kFormicEstimatorInstances = 2;
+		add_topic_multi("estimator_attitude", 20, kFormicEstimatorInstances);
+		add_topic_multi("estimator_local_position", 20, kFormicEstimatorInstances);
+		add_topic_multi("estimator_odometry", 20, kFormicEstimatorInstances);
+		add_topic_multi("estimator_status", 200, kFormicEstimatorInstances);
+		add_topic_multi("estimator_status_flags", 10, kFormicEstimatorInstances);
+		add_topic_multi("estimator_sensor_bias", 1000, kFormicEstimatorInstances);
+	}
 
 	// EV aid source status (only advertised when EKF2_EV_CTRL enables them)
 	add_optional_topic_multi("estimator_aid_src_ev_vel", 200);

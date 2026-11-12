@@ -42,9 +42,6 @@
 HomePosition::HomePosition(const failsafe_flags_s &failsafe_flags): ModuleParams(nullptr),
 	_failsafe_flags(failsafe_flags)
 {
-	int32_t formic_est_mode = 0;
-	param_get(param_find("FORMIC_EST_MODE"), &formic_est_mode);
-	_formic_mode = (formic_est_mode == 1);
 }
 
 bool HomePosition::hasMovedFromCurrentHomeLocation()
@@ -410,7 +407,7 @@ void HomePosition::update(bool set_automatically, bool check_if_changed)
 		_heading_reset_counter = lpos.heading_reset_counter;
 	}
 
-	// FORMIC_EST_MODE 1: a position reset of the EKF2 selector moves the published frame (a handover back to the
+	// A position reset of the EKF2 selector moves the published frame (a handover back to the
 	// VIO segment frame), not the vehicle. Home keeps its place on the ground, so its local coordinates move by the
 	// same delta; distance to ground without a range finder (Land) uses home.z.
 	const bool xy_reset = (lpos.xy_reset_counter != _xy_reset_counter);
@@ -420,7 +417,7 @@ void HomePosition::update(bool set_automatically, bool check_if_changed)
 	const bool move_xy = xy_reset && home.valid_lpos && PX4_ISFINITE(lpos.delta_xy[0]) && PX4_ISFINITE(lpos.delta_xy[1]);
 	const bool move_z = z_reset && (home.valid_lpos || home.valid_alt) && PX4_ISFINITE(lpos.delta_z);
 
-	if (_formic_mode && (move_xy || move_z) && _valid && set_automatically) {
+	if ((move_xy || move_z) && _valid && set_automatically) {
 		home_position_s moved = home;
 
 		if (move_xy) {

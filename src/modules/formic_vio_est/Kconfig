@@ -2,4 +2,4 @@ menuconfig MODULES_FORMIC_VIO_EST
 	bool "formic vio est"
 	default n
 	---help---
-		Estimator instance 1 for FORMIC_EST_MODE 1: the VIO carried to now on the IMU.
+		Estimator instance 1: the VIO carried to now on the IMU.

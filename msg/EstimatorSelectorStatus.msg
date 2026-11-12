@@ -21,7 +21,7 @@ float32[4] accumulated_accel_error
 bool gyro_fault_detected
 bool accel_fault_detected
 
-# FORMIC_EST_MODE 1: the role policy and the frame anchors (published = Rz(anchor_yaw) * instance + anchor_shift)
+# Formic: the role policy and the frame anchors (published = Rz(anchor_yaw) * instance + anchor_shift)
 bool formic_role_active		# the role policy picks the primary instead of the error scores
 uint8 role_primary		# instance the role policy wants
 float32[2] anchor_yaw		# anchor of instance 0 and 1: rotation about down (rad)

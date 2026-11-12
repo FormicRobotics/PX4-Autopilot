@@ -1,4 +1,4 @@
-# Status of formic_vio_est, estimator instance 1 in FORMIC_EST_MODE 1.
+# Status of formic_vio_est, estimator instance 1.
 
 uint64 timestamp			# time since system start (microseconds)
 uint64 timestamp_sample			# sample time of the newest accepted VIO pose, PX4 clock (microseconds)

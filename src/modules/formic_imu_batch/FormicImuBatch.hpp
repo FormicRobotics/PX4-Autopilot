@@ -1,6 +1,7 @@
 #pragma once
 
 #include <px4_platform_common/module.h>
+#include <px4_platform_common/module_params.h>
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
 #include <lib/perf/perf_counter.h>
 #include <drivers/drv_hrt.h>
@@ -8,13 +9,17 @@
 #include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionCallback.hpp>
+#include <uORB/topics/formic_batch_enable.h>
 #include <uORB/topics/formic_imu_batch.h>
+#include <uORB/topics/parameter_update.h>
 #include <uORB/topics/sensor_accel.h>
 #include <uORB/topics/sensor_accel_fifo.h>
 #include <uORB/topics/sensor_gyro.h>
 #include <uORB/topics/sensor_gyro_fifo.h>
 #include <uORB/topics/sensor_selection.h>
+#include <uORB/topics/vehicle_status.h>
 
+#include "BatchGate.hpp"
 #include "SampleBatcher.hpp"
 
 using namespace time_literals;
@@ -26,8 +31,12 @@ using namespace time_literals;
  * sensor_accel_fifo on every publication and publishes the samples in batches on
  * formic_gyro_batch and formic_accel_batch. Each batch carries the sensor temperature from the
  * newest sensor_gyro / sensor_accel of its device.
+ *
+ * Publishes only while its gate is on (BatchGate): FORMIC_BATCH_DEF at boot and after a disarm,
+ * formic_batch_enable in between. While off, the FIFO callbacks are unregistered and the module
+ * runs at 10 Hz to read commands.
  */
-class FormicImuBatch : public ModuleBase<FormicImuBatch>, public px4::ScheduledWorkItem
+class FormicImuBatch : public ModuleBase<FormicImuBatch>, public ModuleParams, public px4::ScheduledWorkItem
 {
 public:
 	FormicImuBatch();
@@ -45,6 +54,13 @@ private:
 	static constexpr int NONE{-1};
 
 	void Run() override;
+
+	/// Reads FORMIC_BATCH_DEF, the arming state and formic_batch_enable into the gate, and starts or
+	/// stops the batching when its state changed.
+	void updateGate();
+
+	/// Unregisters the FIFO callbacks and drops the partly filled batches.
+	void stopBatching();
 
 	/// Follows sensor_selection: the FIFO and report instances of the gyro and accel in use.
 	void updateSelection();
@@ -66,6 +82,11 @@ private:
 	static float reportTemperature(uORB::Subscription (&subs)[MAX_INSTANCES], int instance, uint32_t device_id);
 
 	uORB::Subscription _sensor_selection_sub{ORB_ID(sensor_selection)};
+	uORB::Subscription _parameter_update_sub{ORB_ID(parameter_update)};
+	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
+	uORB::Subscription _batch_enable_sub{ORB_ID(formic_batch_enable)};
+
+	formic_imu_batch::BatchGate _gate{};
 
 	uORB::SubscriptionCallbackWorkItem _gyro_fifo_sub[MAX_INSTANCES] {
 		{this, ORB_ID(sensor_gyro_fifo), 0},
@@ -127,4 +148,8 @@ private:
 	formic_imu_batch_s _out{};
 
 	perf_counter_t _cycle_perf{perf_alloc(PC_ELAPSED, MODULE_NAME": cycle")};
+
+	DEFINE_PARAMETERS(
+		(ParamInt<px4::params::FORMIC_BATCH_DEF>) _param_formic_batch_def
+	)
 };

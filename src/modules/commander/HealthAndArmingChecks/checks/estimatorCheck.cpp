@@ -758,9 +758,9 @@ void EstimatorChecks::setModeRequirementFlags(const Context &context, bool pre_f
 		!checkPosVelValidity(now, v_xy_valid, lpos.evh, _param_com_vel_fs_evh.get(), lpos.timestamp,
 				     _last_lvel_fail_time_us, !failsafe_flags.local_velocity_invalid);
 
-	// FORMIC_EST_MODE 1: the VIO instance stays valid while the IMU carries it through a VIO gap, so
+	// The VIO instance stays valid while the IMU carries it through a VIO gap, so
 	// Position mode keeps a valid state until the mode has changed. Fail over on its health instead.
-	if (_param_formic_est_mode.get() == 1) {
+	{
 		estimator_selector_status_s selector;
 		formic_vio_est_status_s vio;
 

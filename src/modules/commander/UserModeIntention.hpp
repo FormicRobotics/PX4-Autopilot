@@ -38,9 +38,9 @@
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/estimator_aid_source1d.h>
 #include <uORB/topics/formic_pos_req.h>
-#include <uORB/topics/formic_ev_flag.h>
 #include <uORB/topics/formic_vio_est_status.h>
 #include <uORB/topics/estimator_selector_status.h>
+#include <uORB/topics/offboard_control_mode.h>
 #include <parameters/param.h>
 
 #include "HealthAndArmingChecks/HealthAndArmingChecks.hpp"
@@ -115,14 +115,14 @@ private:
 	bool isArmed() const { return _vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED; }
 
 	///////add by naor ////////////////
-	// Returns true if nav_state is one that requires local or global position.
-	bool modeRequiresPosition(uint8_t nav_state) const;
-	// True when formic_watchdog_ev reports fresh EV data and EKF/EV convergence.
-	// FORMIC_EST_MODE 1: true when the VIO instance is the primary and healthy.
+	// Returns true if nav_state is one that requires local or global position, or is Offboard
+	// with position or velocity setpoints (formic_frames::mode_needs_position).
+	bool modeRequiresPosition(uint8_t nav_state);
+	// True when the VIO instance (formic_vio_est) is the primary and healthy.
 	bool evReadyForPosition();
 	void publish_formic_pos_req(bool pos_requested);
 
-	// FORMIC_EST_MODE 1: decides formic_pos_req.use_vision_now, which asks the EKF2 selector for the VIO
+	// Decides formic_pos_req.use_vision_now, which asks the EKF2 selector for the VIO
 	// instance. Entering Position, the estimator switches first and the mode second; leaving it (also by
 	// failsafe) the mode changes first and the estimator second.
 	void updateVisionRole();
@@ -142,10 +142,10 @@ private:
 	uint8_t _pending_nav_state{UINT8_MAX};        ///< mode waiting for position lock (UINT8_MAX = none)
 	hrt_abstime _pos_wait_start_us{0};            ///< hrt timestamp when the pending request was parked (0 = not active)
 	uORB::Publication<formic_pos_req_s> _formic_pos_req_pub{ORB_ID(formic_pos_req)}; ///< Formic position request publisher
-	uORB::Subscription _formic_ev_flag_sub{ORB_ID(formic_ev_flag)}; ///< Sub to check the EV flag status
+	uORB::Subscription _offboard_control_mode_sub{ORB_ID(offboard_control_mode)}; ///< Offboard's position need
+	param_t _param_com_of_loss_t{PARAM_INVALID};  ///< how long offboard_control_mode stays fresh
 
-	// FORMIC_EST_MODE 1
-	bool _formic_vio_mode{false};                 ///< FORMIC_EST_MODE 1 at boot
+	// VIO instance role
 	param_t _param_formic_ret_delay{PARAM_INVALID};
 	uORB::Subscription _formic_vio_est_status_sub{ORB_ID(formic_vio_est_status)};
 	uORB::Subscription _estimator_selector_status_sub{ORB_ID(estimator_selector_status)};

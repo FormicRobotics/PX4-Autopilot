@@ -52,12 +52,7 @@ EKF2Selector::EKF2Selector() :
 	_vehicle_odometry_pub.advertise();
 	_wind_pub.advertise();
 
-	_formic_mode = (_param_formic_est_mode.get() == 1);
-
-	if (_formic_mode) {
-		PX4_INFO("FORMIC_EST_MODE 1: role policy, EKF2 instance %d, VIO instance %d", FORMIC_EKF_INSTANCE,
-			 FORMIC_VIO_INSTANCE);
-	}
+	PX4_INFO("Formic role policy, EKF2 instance %d, VIO instance %d", FORMIC_EKF_INSTANCE, FORMIC_VIO_INSTANCE);
 }
 
 EKF2Selector::~EKF2Selector()
@@ -606,7 +601,7 @@ void EKF2Selector::PublishControlState(const vehicle_local_position_s &lpos)
 	}
 
 	formic_control_state_s state = formic_frames::control_state_from(lpos, _attitude_published, _selected_instance,
-				       _formic_mode ? _formic_handover_count : _instance_changed_count, _formic_ramp_active);
+				       _formic_handover_count, _formic_ramp_active);
 	state.timestamp = lpos.timestamp;
 	_formic_control_state_pub.publish(state);
 }
@@ -733,12 +728,12 @@ void EKF2Selector::Run()
 	}
 
 	// update combined test ratio for all estimators
-	const bool updated = UpdateErrorScores();
+	UpdateErrorScores();
 
 	// if no valid instance then force select first instance with valid IMU
 	if (_selected_instance == INVALID_INSTANCE) {
-		// FORMIC_EST_MODE 1: EKF2 flies first
-		const uint8_t instances_to_try = _formic_mode ? FORMIC_EKF_INSTANCE + 1 : EKF2_MAX_INSTANCES;
+		// EKF2 flies first
+		const uint8_t instances_to_try = FORMIC_EKF_INSTANCE + 1;
 
 		for (uint8_t i = 0; i < instances_to_try; i++) {
 			if ((_instance[i].accel_device_id != 0)
@@ -757,110 +752,8 @@ void EKF2Selector::Run()
 		}
 	}
 
-	if (_formic_mode) {
-		FormicRun();
-		ScheduleDelayed(FILTER_UPDATE_PERIOD);
-		return;
-	}
-
-	if (updated) {
-		const uint8_t available_instances_prev = _available_instances;
-		const uint8_t selected_instance_prev = _selected_instance;
-		const uint32_t instance_changed_count_prev = _instance_changed_count;
-		const hrt_abstime last_instance_change_prev = _last_instance_change;
-
-		bool lower_error_available = false;
-		float alternative_error = 0.f; // looking for instances that have error lower than the current primary
-		float best_test_ratio = FLT_MAX;
-
-		uint8_t best_ekf = _selected_instance;
-		uint8_t best_ekf_alternate = INVALID_INSTANCE;
-		uint8_t best_ekf_different_imu = INVALID_INSTANCE;
-
-		// loop through all available instances to find if an alternative is available
-		for (int i = 0; i < _available_instances; i++) {
-			// Use an alternative instance if  -
-			// (healthy and has updated recently)
-			// AND
-			// (has relative error less than selected instance and has not been the selected instance for at least 10 seconds
-			// OR
-			// selected instance has stopped updating
-			if (_instance[i].healthy.get_state() && (i != _selected_instance)) {
-				const float test_ratio = _instance[i].combined_test_ratio;
-				const float relative_error = _instance[i].relative_test_ratio;
-
-				if (relative_error < alternative_error) {
-					best_ekf_alternate = i;
-					alternative_error = relative_error;
-
-					// relative error less than selected instance and has not been the selected instance for at least 10 seconds
-					if ((relative_error <= -_rel_err_thresh) && hrt_elapsed_time(&_instance[i].time_last_selected) > 10_s) {
-						lower_error_available = true;
-					}
-				}
-
-				if ((test_ratio > 0) && (test_ratio < best_test_ratio)) {
-					best_ekf = i;
-					best_test_ratio = test_ratio;
-
-					// also check next best available ekf using a different IMU
-					if (_instance[i].accel_device_id != _instance[_selected_instance].accel_device_id) {
-						best_ekf_different_imu = i;
-					}
-				}
-			}
-		}
-
-		if (!_instance[_selected_instance].healthy.get_state()) {
-			// prefer the best healthy instance using a different IMU
-			if (!SelectInstance(best_ekf_different_imu)) {
-				// otherwise switch to the healthy instance with best overall test ratio
-				SelectInstance(best_ekf);
-			}
-
-		} else if (lower_error_available
-			   && ((hrt_elapsed_time(&_last_instance_change) > 10_s)
-			       || (_instance[_selected_instance].warning
-				   && (hrt_elapsed_time(&_instance[_selected_instance].time_last_no_warning) > 1_s)))) {
-
-			// if this instance has a significantly lower relative error to the active primary, we consider it as a
-			// better instance and would like to switch to it even if the current primary is healthy
-			SelectInstance(best_ekf_alternate);
-
-		} else if (_request_instance.load() != INVALID_INSTANCE) {
-
-			const uint8_t new_instance = _request_instance.load();
-
-			// attempt to switch to user manually selected instance
-			if (!SelectInstance(new_instance)) {
-				PX4_ERR("unable to switch to user selected instance %d", new_instance);
-			}
-
-			// reset
-			_request_instance.store(INVALID_INSTANCE);
-		}
-
-		// publish selector status at ~1 Hz or immediately on any change
-		if (_selector_status_publish || (hrt_elapsed_time(&_last_status_publish) > 1_s)
-		    || (available_instances_prev != _available_instances)
-		    || (selected_instance_prev != _selected_instance)
-		    || (instance_changed_count_prev != _instance_changed_count)
-		    || (last_instance_change_prev != _last_instance_change)
-		    || _accel_fault_detected || _gyro_fault_detected) {
-
-			PublishEstimatorSelectorStatus();
-			_selector_status_publish = false;
-		}
-	}
-
-	// republish selected estimator data for system
-	PublishVehicleAttitude();
-	PublishVehicleLocalPosition();
-	PublishVehicleGlobalPosition();
-	PublishVehicleOdometry();
-	PublishWindEstimate();
-
-	// re-schedule as backup timeout
+	// the role policy picks the primary and publishes it through its anchor
+	FormicRun();
 	ScheduleDelayed(FILTER_UPDATE_PERIOD);
 }
 
@@ -889,24 +782,22 @@ void EKF2Selector::PublishEstimatorSelectorStatus()
 		selector_status.accumulated_accel_error[i] = _accumulated_accel_error[i];
 	}
 
-	if (_formic_mode) {
-		selector_status.formic_role_active = true;
-		selector_status.role_primary = _formic_role;
+	selector_status.formic_role_active = true;
+	selector_status.role_primary = _formic_role;
 
-		for (int i = 0; i < 2; i++) {
-			selector_status.anchor_yaw[i] = _formic_anchor[i].psi;
-			selector_status.anchor_valid[i] = _formic_anchor_valid[i];
+	for (int i = 0; i < 2; i++) {
+		selector_status.anchor_yaw[i] = _formic_anchor[i].psi;
+		selector_status.anchor_valid[i] = _formic_anchor_valid[i];
 
-			for (int j = 0; j < 3; j++) {
-				selector_status.anchor_shift[3 * i + j] = _formic_anchor[i].t(j);
-			}
+		for (int j = 0; j < 3; j++) {
+			selector_status.anchor_shift[3 * i + j] = _formic_anchor[i].t(j);
 		}
-
-		selector_status.vio_segment = _formic_anchor_segment;
-		selector_status.ramp_active = _formic_ramp_active;
-		selector_status.handover_count = _formic_handover_count;
-		selector_status.ekf_vel_seed_pending = _formic_seed_pending;
 	}
+
+	selector_status.vio_segment = _formic_anchor_segment;
+	selector_status.ramp_active = _formic_ramp_active;
+	selector_status.handover_count = _formic_handover_count;
+	selector_status.ekf_vel_seed_pending = _formic_seed_pending;
 
 	selector_status.timestamp = hrt_absolute_time();
 	_estimator_selector_status_pub.publish(selector_status);
@@ -931,19 +822,17 @@ void EKF2Selector::PrintStatus()
 			 (_selected_instance == i) ? "*" : "");
 	}
 
-	if (_formic_mode) {
-		PX4_INFO("FORMIC_EST_MODE 1: role %" PRIu8 "%s, %" PRIu32 " handovers, tilt ramp %s, velocity seed %s",
-			 _formic_role, (_formic_override != INVALID_INSTANCE) ? " (select_instance)" : "", _formic_handover_count,
-			 _formic_ramp_active ? "on" : "off", _formic_seed_pending ? "pending" : "idle");
+	PX4_INFO("role %" PRIu8 "%s, %" PRIu32 " handovers, tilt ramp %s, velocity seed %s",
+		 _formic_role, (_formic_override != INVALID_INSTANCE) ? " (select_instance)" : "", _formic_handover_count,
+		 _formic_ramp_active ? "on" : "off", _formic_seed_pending ? "pending" : "idle");
 
-		for (int i = 0; i < 2; i++) {
-			PX4_INFO("anchor %d: %s yaw %.2f deg, shift %.2f %.2f %.2f m%s", i, _formic_anchor_valid[i] ? "" : "(none)",
-				 (double)math::degrees(_formic_anchor[i].psi), (double)_formic_anchor[i].t(0), (double)_formic_anchor[i].t(1),
-				 (double)_formic_anchor[i].t(2), (i == FORMIC_VIO_INSTANCE) ? "" : "");
-		}
-
-		PX4_INFO("instance %d anchor belongs to VIO segment %" PRIu32, FORMIC_VIO_INSTANCE, _formic_anchor_segment);
+	for (int i = 0; i < 2; i++) {
+		PX4_INFO("anchor %d: %s yaw %.2f deg, shift %.2f %.2f %.2f m%s", i, _formic_anchor_valid[i] ? "" : "(none)",
+			 (double)math::degrees(_formic_anchor[i].psi), (double)_formic_anchor[i].t(0), (double)_formic_anchor[i].t(1),
+			 (double)_formic_anchor[i].t(2), (i == FORMIC_VIO_INSTANCE) ? "" : "");
 	}
+
+	PX4_INFO("instance %d anchor belongs to VIO segment %" PRIu32, FORMIC_VIO_INSTANCE, _formic_anchor_segment);
 }
 
 void EKF2Selector::FormicRun()

@@ -107,7 +107,7 @@ private:
 	// Update the error scores for all available instances
 	bool UpdateErrorScores();
 
-	// FORMIC_EST_MODE 1: EKF2 is instance 0 and flies Altitude mode, formic_vio_est is instance 1 and
+	// Formic: EKF2 is instance 0 and flies Altitude mode, formic_vio_est is instance 1 and
 	// flies Position mode. A role policy picks the primary from formic_pos_req.use_vision_now; each
 	// instance is published through an anchor (a rotation about down and a shift) that keeps the
 	// published frame: one frame per VIO segment.
@@ -271,8 +271,7 @@ private:
 	uint8_t _global_position_instance_prev{INVALID_INSTANCE};
 	uint8_t _odometry_instance_prev{INVALID_INSTANCE};
 
-	// FORMIC_EST_MODE 1
-	bool _formic_mode{false};                         ///< FORMIC_EST_MODE 1 at boot
+	// Formic role policy
 	formic_frames::Anchor _formic_anchor[2] {};        ///< per instance: published = anchor * instance
 	bool _formic_anchor_valid[2] {true, false};       ///< EKF2 is published as it is at boot
 	uint32_t _formic_anchor_segment{0};               ///< VIO segment of the instance 1 anchor
@@ -280,7 +279,7 @@ private:
 	uint64_t _formic_ramp_t0{0};
 	bool _formic_ramp_active{false};
 	uint8_t _formic_role{FORMIC_EKF_INSTANCE};
-	uint8_t _formic_override{INVALID_INSTANCE};       ///< ekf2 select_instance in FORMIC_EST_MODE 1 (bench)
+	uint8_t _formic_override{INVALID_INSTANCE};       ///< ekf2 select_instance (bench)
 	uint32_t _formic_handover_count{0};
 	float _formic_unaided_offset{0.f};                 ///< added to the primary's anchored unaided heading, rad
 	bool _formic_backstop_warned{false};
@@ -329,7 +328,6 @@ private:
 		(ParamFloat<px4::params::EKF2_SEL_IMU_ANG>) _param_ekf2_sel_imu_angle,
 		(ParamFloat<px4::params::EKF2_SEL_IMU_ACC>) _param_ekf2_sel_imu_accel,
 		(ParamFloat<px4::params::EKF2_SEL_IMU_VEL>) _param_ekf2_sel_imu_velocity,
-		(ParamInt<px4::params::FORMIC_EST_MODE>) _param_formic_est_mode,
 		(ParamFloat<px4::params::FORMIC_HO_TAU>) _param_formic_ho_tau,
 		(ParamInt<px4::params::FORMIC_HO_VSEED>) _param_formic_ho_vseed
 	)

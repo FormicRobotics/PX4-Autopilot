@@ -264,7 +264,7 @@ void FormicVioEst::updateVio(hrt_abstime now)
 	if (_formic_odom_sub.update(&formic) && (formic.timestamp != _last_msg_timestamp)) {
 		_last_msg_timestamp = formic.timestamp;
 
-		// as formic_watchdog_ev: the publish time on the PX4 clock minus the sender's age
+		// the publish time on the PX4 clock minus the sender's age
 		const auto sample = formic_frames::resolve_sample_time(formic.odometry.timestamp, formic.odometry.timestamp_sample,
 				    formic.timestamp, now, static_cast<int64_t>(_param_formic_vio_dly.get()) * 1000, AGE_VALID_US);
 
@@ -734,14 +734,6 @@ int FormicVioEst::print_status()
 
 int FormicVioEst::task_spawn(int argc, char *argv[])
 {
-	int32_t est_mode = 0;
-	param_get(param_find("FORMIC_EST_MODE"), &est_mode);
-
-	if (est_mode != 1) {
-		PX4_ERR("not started: FORMIC_EST_MODE is %" PRId32 ", needs 1", est_mode);
-		return PX4_ERROR;
-	}
-
 	FormicVioEst *instance = new FormicVioEst();
 
 	if (!instance) {
@@ -791,8 +783,8 @@ int FormicVioEst::print_usage(const char *reason)
 	PRINT_MODULE_DESCRIPTION(
 		R"DESCR_STR(
 ### Description
-Estimator instance 1 for FORMIC_EST_MODE 1: the VIO pose from formic_odom carried to now on the IMU.
-EKF2 runs as instance 0 and never sees vision. Started only in FORMIC_EST_MODE 1.
+Estimator instance 1: the VIO pose from formic_odom carried to now on the IMU.
+EKF2 runs as instance 0 and never sees vision.
 
 The pose of the FMU IMU arrives 70-125 ms after its sample time. The module integrates
 vehicle_imu instance 0, minus EKF2's bias estimates, from the sample time to now and pulls the

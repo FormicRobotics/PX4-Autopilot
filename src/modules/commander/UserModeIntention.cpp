@@ -35,6 +35,7 @@
 #include "UserModeIntention.hpp"
 #include <parameters/param.h>
 #include <drivers/drv_hrt.h>
+#include <lib/formic_frames/position_need.hpp>
 
 using namespace time_literals;
 
@@ -43,10 +44,8 @@ UserModeIntention::UserModeIntention(const vehicle_status_s &vehicle_status,
 	: _vehicle_status(vehicle_status), _health_and_arming_checks(health_and_arming_checks),
 	  _handler(handler)
 {
-	int32_t formic_est_mode = 0;
-	param_get(param_find("FORMIC_EST_MODE"), &formic_est_mode);
-	_formic_vio_mode = (formic_est_mode == 1);
 	_param_formic_ret_delay = param_find("FORMIC_RET_DELAY");
+	_param_com_of_loss_t = param_find("COM_OF_LOSS_T");
 }
 
 bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource source, bool allow_fallback,
@@ -133,19 +132,32 @@ bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource
 }
 
 ///////add by naor ////////////////
-bool UserModeIntention::modeRequiresPosition(uint8_t nav_state) const
+bool UserModeIntention::modeRequiresPosition(uint8_t nav_state)
 {
 	const failsafe_flags_s &flags = _health_and_arming_checks.failsafeFlags();
-	const uint32_t bit = 1u << nav_state;
-	return (flags.mode_req_local_position & bit) || (flags.mode_req_global_position & bit)
-	       || (flags.mode_req_local_position_relaxed & bit) || (flags.mode_req_global_position_relaxed & bit);
+
+	if (nav_state != vehicle_status_s::NAVIGATION_STATE_OFFBOARD) {
+		return formic_frames::mode_in_position_masks(flags, nav_state);
+	}
+
+	// Offboard needs position while its setpoints ask for position or velocity control; they are
+	// fresh for as long as offboardCheck takes them (COM_OF_LOSS_T)
+	offboard_control_mode_s offboard{};
+	_offboard_control_mode_sub.copy(&offboard);
+
+	float timeout_s = 1.f;
+
+	if (_param_com_of_loss_t != PARAM_INVALID) {
+		param_get(_param_com_of_loss_t, &timeout_s);
+	}
+
+	return formic_frames::mode_needs_position(flags, nav_state, offboard, hrt_absolute_time(),
+			static_cast<uint64_t>(timeout_s * 1e6f));
 }
 
 void UserModeIntention::tick()
 {
-	if (_formic_vio_mode) {
-		updateVisionRole();
-	}
+	updateVisionRole();
 
 	///////add by naor ////////////////
 
@@ -178,8 +190,8 @@ void UserModeIntention::onFailsafeNavState()
 	// Keep requesting position as long as the *user's intention* (or a still-pending
 	// position request) needs it, even if failsafe has temporarily forced the actual
 	// nav_state into a non-position mode (e.g. POSCTL -> ALTCTL after a transient position
-	// loss). Publishing pos_req = false here would cut the EV/vision feed to the estimator
-	// (see formic_watchdog_ev), which is exactly what's needed to regain position - doing so
+	// loss). Publishing pos_req = false here would stop asking the EKF2 selector for the VIO
+	// instance, which is exactly what's needed to regain position - doing so
 	// would permanently lock us out of ever recovering, since the failsafe can only clear
 	// once position becomes valid again. Only stop requesting position once the user's
 	// intended mode itself no longer requires it (e.g. they explicitly switched to ALTCTL/STAB).
@@ -242,27 +254,14 @@ void UserModeIntention::updateVisionRole()
 
 bool UserModeIntention::evReadyForPosition()
 {
-	if (_formic_vio_mode) {
-		// Position mode flies on the VIO instance: it must be the primary already
-		estimator_selector_status_s selector{};
-		formic_vio_est_status_s vio{};
-		const hrt_abstime now = hrt_absolute_time();
+	// Position mode flies on the VIO instance: it must be the primary already
+	estimator_selector_status_s selector{};
+	formic_vio_est_status_s vio{};
+	const hrt_abstime now = hrt_absolute_time();
 
-		return _estimator_selector_status_sub.copy(&selector) && (now < selector.timestamp + 1_s)
-		       && (selector.primary_instance == 1)
-		       && _formic_vio_est_status_sub.copy(&vio) && (now < vio.timestamp + 200_ms) && vio.healthy;
-	}
-
-	formic_ev_flag_s formic_ev_flag{};
-
-	if (!_formic_ev_flag_sub.copy(&formic_ev_flag)) {
-		return false;
-	}
-
-	// formic_watchdog_ev publishes every 10 ms - a stale flag means the watchdog is not running
-	const bool flag_fresh = hrt_elapsed_time(&formic_ev_flag.timestamp) < 100_ms;
-
-	return flag_fresh && formic_ev_flag.ev_data_arrived && formic_ev_flag.ekfs_converged;
+	return _estimator_selector_status_sub.copy(&selector) && (now < selector.timestamp + 1_s)
+	       && (selector.primary_instance == 1)
+	       && _formic_vio_est_status_sub.copy(&vio) && (now < vio.timestamp + 200_ms) && vio.healthy;
 }
 
 void UserModeIntention::publish_formic_pos_req(bool pos_requested)

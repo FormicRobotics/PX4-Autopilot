@@ -1,6 +1,7 @@
 #include "FormicImuBatch.hpp"
 
 FormicImuBatch::FormicImuBatch() :
+	ModuleParams(nullptr),
 	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::hp_default)
 {
 }
@@ -17,7 +18,9 @@ FormicImuBatch::~FormicImuBatch()
 
 bool FormicImuBatch::init()
 {
-	// the selection is checked on this backup schedule; the samples arrive by callback
+	_gate.setDefault(_param_formic_batch_def.get() != 0);
+
+	// the gate and the selection are checked on this backup schedule; the samples arrive by callback
 	ScheduleOnInterval(100_ms);
 	return true;
 }
@@ -50,6 +53,52 @@ float FormicImuBatch::reportTemperature(uORB::Subscription (&subs)[MAX_INSTANCES
 	}
 
 	return formic_imu_batch::batchTemperature(device_id, report.device_id, report.temperature);
+}
+
+void FormicImuBatch::updateGate()
+{
+	if (_parameter_update_sub.updated()) {
+		parameter_update_s parameter_update;
+		_parameter_update_sub.copy(&parameter_update);
+		updateParams();
+	}
+
+	_gate.setDefault(_param_formic_batch_def.get() != 0);
+
+	vehicle_status_s vehicle_status;
+
+	if (_vehicle_status_sub.update(&vehicle_status)) {
+		_gate.setArmed(vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED);
+	}
+
+	formic_batch_enable_s command;
+
+	while (_batch_enable_sub.update(&command)) {
+		_gate.command(command.enable);
+	}
+
+	if (_gate.takeChange()) {
+		// both ways start clean: turning on, updateSelection() finds the instances again, registers
+		// their callbacks and takes the first read of each as new
+		stopBatching();
+		_last_selection_check = 0;
+		PX4_INFO("batches %s (%s)", _gate.enabled() ? "on" : "off",
+			 formic_imu_batch::BatchGate::sourceName(_gate.source()));
+	}
+}
+
+void FormicImuBatch::stopBatching()
+{
+	for (int i = 0; i < MAX_INSTANCES; i++) {
+		_gyro_fifo_sub[i].unregisterCallback();
+		_accel_fifo_sub[i].unregisterCallback();
+	}
+
+	_gyro_instance = NONE;
+	_accel_instance = NONE;
+	_gyro_batcher.reset();
+	_accel_batcher.reset();
+	_accel_stagger_armed = false;
 }
 
 void FormicImuBatch::updateSelection()
@@ -150,6 +199,14 @@ void FormicImuBatch::Run()
 
 	perf_begin(_cycle_perf);
 
+	updateGate();
+
+	if (!_gate.enabled()) {
+		// nothing is published; the 10 Hz schedule keeps reading commands
+		perf_end(_cycle_perf);
+		return;
+	}
+
 	const hrt_abstime now = hrt_absolute_time();
 
 	if ((now - _last_selection_check) > 100_ms) {
@@ -202,6 +259,8 @@ void FormicImuBatch::Run()
 
 int FormicImuBatch::print_status()
 {
+	PX4_INFO("batches %s, set by %s (FORMIC_BATCH_DEF %" PRId32 ")", _gate.enabled() ? "on" : "off",
+		 formic_imu_batch::BatchGate::sourceName(_gate.source()), _param_formic_batch_def.get());
 	// short lines: PX4_INFO cuts a line at 128 characters
 	PX4_INFO("gyro  %" PRIu32 " fifo %d: sent %" PRIu64 ", missing %" PRIu32 ", queue lost %" PRIu32 ", out of order %" PRIu32,
 		 _gyro_device_id, _gyro_instance, _gyro_batcher.emitted(), _gyro_batcher.lost(), _gyro_queue_overflow,
@@ -253,6 +312,9 @@ Every FIFO sample of the IMU EKF2 flies on, for the Jetson. Follows sensor_selec
 accel in use and publishes their sensor_gyro_fifo / sensor_accel_fifo samples in batches of up to 32
 on formic_gyro_batch and formic_accel_batch, each sample with its own time. Each batch carries the
 sensor temperature from the driver's sensor_gyro / sensor_accel.
+
+Publishes while its gate is on: FORMIC_BATCH_DEF sets the state at boot and after every disarm, and a
+formic_batch_enable message (/fmu/in/formic_batch_enable) turns it on or off in between.
 )DESCR_STR");
 
 	PRINT_MODULE_USAGE_NAME("formic_imu_batch", "system");

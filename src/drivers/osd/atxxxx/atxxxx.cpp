@@ -370,12 +370,17 @@ OSDatxxxx::update_topics()
 		_nav_state = vehicle_status.nav_state;
 	}
 
-	/* update vision (VIO) state, same labels as msp_osd FORMIC_VIO_STATUS */
-	if (_formic_ev_flag_sub.updated()) {
-		formic_ev_flag_s formic_ev_flag{};
-		_formic_ev_flag_sub.copy(&formic_ev_flag);
+	/* update vision (VIO) state from the VIO instance */
+	if (_formic_vio_est_status_sub.updated()) {
+		formic_vio_est_status_s vio{};
+		_formic_vio_est_status_sub.copy(&vio);
 
-		_vision_state = formic_ev_flag.dstate;
+		if (!vio.healthy) {
+			_vision_state = 0;
+
+		} else {
+			_vision_state = (vio.vio_status == formic_vio_est_status_s::VIO_STATUS_DEGRADED) ? 2 : 1;
+		}
 	}
 
 	return PX4_OK;
@@ -467,12 +472,12 @@ OSDatxxxx::update_screen()
 
 	add_string_to_screen_centered(get_flight_mode(_nav_state), 11, 10);
 
-	// vision state under the flight mode (Dstate, see formic_watchdog_ev.hpp)
+	// vision state under the flight mode
 	const char *vision = "NO VIS";
 
 	switch (_vision_state) {
-	case 1: vision = "VIS OK"; break; // Dstate::VisionON
-	case 2: vision = "DEGRAD"; break; // Dstate::DEGRADED
+	case 1: vision = "VIS OK"; break; // VIO healthy
+	case 2: vision = "DEGRAD"; break; // VIO healthy, status DEGRADED
 	}
 
 	add_string_to_screen_centered(vision, 12, 10);

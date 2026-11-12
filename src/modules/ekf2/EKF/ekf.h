@@ -320,7 +320,7 @@ public:
 
 	// return the amount the local horizontal velocity changed in the last reset and the number of reset events
 	uint8_t get_velNE_reset_count() const { return _state_reset_status.reset_count.velNE; }
-	// FORMIC_EST_MODE 1: at a handover from the VIO instance, set the published (output) horizontal
+	// Formic: at a handover from the VIO instance, set the published (output) horizontal
 	// velocity, shifting the delayed state by the same amount. Published as a velNE reset.
 	void resetHorizontalOutputVelocityTo(const Vector2f &new_vel_ne, float vel_var);
 
@@ -375,12 +375,6 @@ public:
 
 	const BiasEstimator::status &getEvHgtBiasEstimatorStatus() const { return _ev_hgt_b_est.getStatus(); }
 	const BiasEstimator::status &getEvPosBiasEstimatorStatus(int i) const { return _ev_pos_b_est.getStatus(i); }
-
-	// add by naor //
-	// Position request dropped (formic_pos_req 1 -> 0) or VIO epoch jump: stop EV fusion and expire the
-	// horizontal no-aid timeout now instead of waiting EKF2_NOAID_TOUT on a dead feed.
-	void forceEvAidingTimeout();
-	// add by naor //
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 #if defined(CONFIG_EKF2_GNSS)

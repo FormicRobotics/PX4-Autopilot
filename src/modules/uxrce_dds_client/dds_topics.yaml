@@ -27,7 +27,6 @@ publications:
 - topic: /fmu/out/manual_control_setpoint
   type: px4_msgs::msg::ManualControlSetpoint
   rate_limit: 25
-
   #- topic: /fmu/out/timesync_status
   # type: px4_msgs::msg::TimesyncStatus
   # rate_limit: 10
@@ -93,9 +92,6 @@ publications:
 - topic: /fmu/out/estimator_status
   type: px4_msgs::msg::EstimatorStatus
   rate_limit: 5
-  # - topic: /fmu/out/estimator_sensor_bias
-  # type: px4_msgs::msg::EstimatorSensorBias
-  # rate_limit: 5.
 
 - topic: /fmu/out/estimator_aid_src_ev_pos
   type: px4_msgs::msg::EstimatorAidSource2d
@@ -132,11 +128,7 @@ publications:
 - topic: /fmu/out/vehicle_visual_odometry
   type: px4_msgs::msg::VehicleOdometry
 
-- topic: /fmu/out/formic_ev_flag
-  type: px4_msgs::msg::FormicEvFlag
-  rate_limit: 10
-
-# FORMIC_EST_MODE 1: the VIO instance's health, and the selector's role and anchors
+# the VIO instance's health, and the selector's role and anchors
 - topic: /fmu/out/formic_vio_est_status
   type: px4_msgs::msg::FormicVioEstStatus
   rate_limit: 10
@@ -222,18 +214,15 @@ subscriptions:
 - topic: /fmu/in/formic/debug_flag
   type: px4_msgs::msg::DebugFlag
 
+# turns formic_gyro_batch / formic_accel_batch on and off (formic_imu_batch); back to FORMIC_BATCH_DEF on disarm
+- topic: /fmu/in/formic_batch_enable
+  type: px4_msgs::msg::FormicBatchEnable
+
 # - topic: /fmu/in/vehicle_torque_setpoint
 #   type: px4_msgs::msg::VehicleTorqueSetpoint
 
 - topic: /fmu/in/actuator_motors
   type: px4_msgs::msg::ActuatorMotors
-
-# - topic: /fmu/in/aux_global_position
-#   type: px4_msgs::msg::VehicleGlobalPosition
-
-# - topic: /fmu/in/sensor_gps
-#   type: px4_msgs::msg::SensorGps
-
 
 # Create uORB::PublicationMulti
 subscriptions_multi:

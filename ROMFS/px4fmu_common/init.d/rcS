@@ -266,14 +266,11 @@ else
 	fi
 
 	#
-	# FORMIC_EST_MODE 1 runs EKF2 behind the selector, which needs SENS_IMU_MODE 0. It is made this
-	# boot's default rather than saved, so FORMIC_EST_MODE 0 gets today's SENS_IMU_MODE back.
+	# EKF2 runs behind the selector as estimator instance 0, with formic_vio_est as instance 1.
+	# That needs SENS_IMU_MODE 0.
 	#
-	if param compare FORMIC_EST_MODE 1
-	then
-		param reset SENS_IMU_MODE
-		param set-default SENS_IMU_MODE 0
-	fi
+	param reset SENS_IMU_MODE
+	param set-default SENS_IMU_MODE 0
 
 	#
 	# Start the tone_alarm driver.
@@ -650,16 +647,9 @@ else
 	formic_imu_batch start
 
 	#
-	# Start the formic estimator modules for the design FORMIC_EST_MODE picks.
-	# 0: formic_watchdog_ev forwards the VIO to EKF2.
-	# 1: formic_vio_est carries the VIO as estimator instance 1; EKF2 never sees vision.
+	# formic_vio_est carries the VIO as estimator instance 1; EKF2 never sees vision.
 	#
-	if param compare FORMIC_EST_MODE 1
-	then
-		formic_vio_est start
-	else
-		formic_watchdog_ev start
-	fi
+	formic_vio_est start
 
 	#
 	# Start the flip after crash module.

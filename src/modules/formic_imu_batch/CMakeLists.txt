@@ -5,6 +5,7 @@ px4_add_module(
 		FormicImuBatch.cpp
 		FormicImuBatch.hpp
 		SampleBatcher.hpp
+		BatchGate.hpp
 	DEPENDS
 		px4_work_queue
 )

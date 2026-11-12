@@ -1,4 +1,4 @@
-# FORMIC_EST_MODE 1: the EKF2 selector asks EKF2 to set its horizontal velocity at a handover from the
+# The EKF2 selector asks EKF2 to set its horizontal velocity at a handover from the
 # VIO instance back to EKF2. The vertical velocity stays EKF2's.
 
 uint64 timestamp		# time since system start (microseconds)

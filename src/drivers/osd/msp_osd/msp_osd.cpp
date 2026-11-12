@@ -141,10 +141,6 @@ MspOsd::MspOsd(const char *device) :
 	// back up device name for connection later
 	strcpy(_device, device);
 
-	int32_t formic_est_mode = 0;
-	param_get(param_find("FORMIC_EST_MODE"), &formic_est_mode);
-	_formic_vio_mode = (formic_est_mode == 1);
-
 	// _is_initialized = true;
 	PX4_INFO("MSP OSD running on %s", _device);
 }
@@ -515,25 +511,24 @@ void MspOsd::Run()
 	}
 	// MSP_FORMIC_VIO_STATUS
 	{
-		formic_ev_flag_s formic_ev_flag{};
-		_formic_ev_flag_sub.copy(&formic_ev_flag);
-
 		if (enabled(SymbolIndex::FORMIC_VIO_STATUS)) {
-			if (_formic_vio_mode) {
-				formic_vio_est_status_s vio{};
-				_formic_vio_est_status_sub.copy(&vio);
-				formic_pos_req_s pos_req{};
-				_formic_pos_req_sub.copy(&pos_req);
-				vehicle_status_s vehicle_status{};
-				_vehicle_status_sub.copy(&vehicle_status);
+			formic_vio_est_status_s vio{};
+			_formic_vio_est_status_sub.copy(&vio);
+			formic_pos_req_s pos_req{};
+			_formic_pos_req_sub.copy(&pos_req);
+			vehicle_status_s vehicle_status{};
+			_vehicle_status_sub.copy(&vehicle_status);
 
-				const auto msg = msp_osd::construct_rendor_FORMIC_VIO_STATUS(vio, vehicle_status, pos_req);
-				this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formicc_vio_status_t));
+			// every mode that needs position, as the commander asks for the VIO
+			failsafe_flags_s failsafe_flags{};
+			_failsafe_flags_sub.copy(&failsafe_flags);
+			offboard_control_mode_s offboard{};
+			_offboard_control_mode_sub.copy(&offboard);
+			const bool in_position = formic_frames::mode_needs_position(failsafe_flags, vehicle_status.nav_state,
+						 offboard, hrt_absolute_time());
 
-			} else {
-				const auto msg = msp_osd::construct_rendor_FORMIC_VIO_STATUS(formic_ev_flag);
-				this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formicc_vio_status_t));
-			}
+			const auto msg = msp_osd::construct_rendor_FORMIC_VIO_STATUS(vio, in_position, pos_req);
+			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formicc_vio_status_t));
 		}
 	}
 

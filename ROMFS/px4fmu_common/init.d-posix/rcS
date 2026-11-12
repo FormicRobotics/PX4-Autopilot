@@ -239,13 +239,10 @@ then
 	exit 1
 fi
 
-# FORMIC_EST_MODE 1 runs EKF2 behind the selector, which needs SENS_IMU_MODE 0. It is made this
-# boot's default rather than saved, so FORMIC_EST_MODE 0 gets today's SENS_IMU_MODE back.
-if param compare FORMIC_EST_MODE 1
-then
-	param reset SENS_IMU_MODE
-	param set-default SENS_IMU_MODE 0
-fi
+# EKF2 runs behind the selector as estimator instance 0, with formic_vio_est as instance 1.
+# That needs SENS_IMU_MODE 0.
+param reset SENS_IMU_MODE
+param set-default SENS_IMU_MODE 0
 
 dataman start
 
@@ -290,16 +287,8 @@ fi
 # Every FIFO sample of the IMU EKF2 flies on, in batches for the Jetson.
 formic_imu_batch start
 
-# Formic estimator modules for the design FORMIC_EST_MODE picks.
-# 0: the EV watchdog. Always started; it self-gates on FORMIC_WDEV_EN (idles when 0),
-#    so the parameter can be toggled at runtime without changing the startup script.
-# 1: formic_vio_est carries the VIO as estimator instance 1; EKF2 never sees vision.
-if param compare FORMIC_EST_MODE 1
-then
-	formic_vio_est start
-else
-	formic_watchdog_ev start
-fi
+# formic_vio_est carries the VIO as estimator instance 1; EKF2 never sees vision.
+formic_vio_est start
 
 if ! pwm_out_sim start -m sim
 then

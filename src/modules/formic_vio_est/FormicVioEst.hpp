@@ -28,11 +28,11 @@
 #include "VioSegment.hpp"
 
 /**
- * Estimator instance 1 in FORMIC_EST_MODE 1: the VIO pose from formic_odom carried to now on the IMU.
+ * Estimator instance 1: the VIO pose from formic_odom carried to now on the IMU.
  *
  * Runs on vehicle_imu instance 0, the IMU of EKF2 (instance 0), minus the biases EKF2 estimates.
  * Publishes the estimator_* topics as instance 1 for the EKF2 selector, in PX4's body frame.
- * Only started in FORMIC_EST_MODE 1.
+ * Started at boot.
  */
 class FormicVioEst : public ModuleBase<FormicVioEst>,
 	public ModuleParams,

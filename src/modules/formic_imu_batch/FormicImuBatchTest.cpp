@@ -3,8 +3,10 @@
 #include <cmath>
 #include <vector>
 
+#include "BatchGate.hpp"
 #include "SampleBatcher.hpp"
 
+using formic_imu_batch::BatchGate;
 using formic_imu_batch::SampleBatcher;
 
 namespace
@@ -240,4 +242,157 @@ TEST(FormicImuBatch, TemperatureComesFromTheBatchDevice)
 	EXPECT_TRUE(std::isnan(batchTemperature(0, 0, 41.5f)));
 	EXPECT_TRUE(std::isnan(batchTemperature(kDevice, kDevice, NAN)));	// BMI270 register invalid
 	EXPECT_TRUE(std::isnan(batchTemperature(kDevice, kDevice, INFINITY)));
+}
+
+// Turned off and on again (the module resets the batcher when the gate turns off): the first batch
+// holds only samples from after the pause, and the pause is not counted as lost samples.
+TEST(FormicImuBatch, OffAndOnAgainStartsClean)
+{
+	SampleBatcher batcher;
+	Sink sink;
+
+	for (int i = 0; i < 10; i++) {
+		addMessage(batcher, sink, kStartUs + static_cast<uint64_t>(i * kDtUs), 1, static_cast<int16_t>(i));
+	}
+
+	batcher.reset();
+	EXPECT_EQ(batcher.pending(), 0);
+
+	constexpr uint64_t kResumeUs = kStartUs + 5'000'000;
+
+	for (int i = 0; i < 32; i++) {
+		addMessage(batcher, sink, kResumeUs + static_cast<uint64_t>(i * kDtUs), 1, static_cast<int16_t>(100 + i));
+	}
+
+	ASSERT_EQ(sink.batches.size(), 1u);
+	EXPECT_EQ(sink.batches[0].samples, 32);
+	EXPECT_EQ(sink.batches[0].timestamp_sample, kResumeUs);
+	EXPECT_EQ(sink.batches[0].x[0], 100);
+	EXPECT_EQ(sink.batches[0].samples_lost, 0u);
+	EXPECT_EQ(batcher.lost(), 0u);
+}
+
+// Off until the default is set; then the default's state, set by the parameter.
+TEST(FormicBatchGate, StartsInTheDefaultState)
+{
+	BatchGate on;
+	EXPECT_FALSE(on.enabled());
+	on.setDefault(true);
+	EXPECT_TRUE(on.enabled());
+	EXPECT_EQ(on.source(), BatchGate::Source::Parameter);
+
+	BatchGate off;
+	off.setDefault(false);
+	EXPECT_FALSE(off.enabled());
+	EXPECT_FALSE(off.takeChange());
+}
+
+// enable: true turns on, enable: false turns off; a repeated command changes nothing.
+TEST(FormicBatchGate, CommandTurnsOnAndOff)
+{
+	BatchGate gate;
+	gate.setDefault(false);
+
+	gate.command(true);
+	EXPECT_TRUE(gate.enabled());
+	EXPECT_EQ(gate.source(), BatchGate::Source::Command);
+	EXPECT_TRUE(gate.takeChange());
+
+	gate.command(true);
+	EXPECT_TRUE(gate.enabled());
+	EXPECT_FALSE(gate.takeChange());
+
+	gate.command(false);
+	EXPECT_FALSE(gate.enabled());
+	EXPECT_TRUE(gate.takeChange());
+
+	gate.command(false);
+	EXPECT_FALSE(gate.enabled());
+	EXPECT_FALSE(gate.takeChange());
+}
+
+// Disarm returns to the default, for both defaults; arming changes nothing.
+TEST(FormicBatchGate, DisarmReturnsToTheDefault)
+{
+	BatchGate gate;
+	gate.setDefault(false);
+	gate.setArmed(false);
+	gate.command(true);
+
+	gate.setArmed(true);
+	EXPECT_TRUE(gate.enabled());
+	EXPECT_EQ(gate.source(), BatchGate::Source::Command);
+
+	gate.setArmed(false);
+	EXPECT_FALSE(gate.enabled());
+	EXPECT_EQ(gate.source(), BatchGate::Source::Disarm);
+
+	BatchGate gate_on;
+	gate_on.setDefault(true);
+	gate_on.setArmed(true);
+	gate_on.command(false);
+	EXPECT_FALSE(gate_on.enabled());
+
+	gate_on.setArmed(false);
+	EXPECT_TRUE(gate_on.enabled());
+	EXPECT_EQ(gate_on.source(), BatchGate::Source::Disarm);
+
+	// arming, and staying disarmed, keep a command
+	gate_on.command(false);
+	gate_on.setArmed(false);
+	EXPECT_FALSE(gate_on.enabled());
+	gate_on.setArmed(true);
+	EXPECT_FALSE(gate_on.enabled());
+}
+
+// The first arming state only records it: a module started on a disarmed vehicle sees no disarm.
+TEST(FormicBatchGate, FirstArmingStateIsNoDisarm)
+{
+	BatchGate gate;
+	gate.setDefault(false);
+	gate.command(true);
+	gate.setArmed(false);
+	EXPECT_TRUE(gate.enabled());
+}
+
+// A new default applies at once and overrides an earlier command; the same default again does not.
+TEST(FormicBatchGate, ParameterChangeAppliesAtOnce)
+{
+	BatchGate gate;
+	gate.setDefault(true);
+	gate.command(false);
+
+	gate.setDefault(true);
+	EXPECT_FALSE(gate.enabled());
+
+	gate.setDefault(false);
+	gate.command(true);
+	EXPECT_TRUE(gate.enabled());
+
+	gate.setDefault(true);
+	EXPECT_TRUE(gate.enabled());
+
+	gate.command(false);
+	gate.setDefault(false);
+	gate.setDefault(true);
+	EXPECT_TRUE(gate.enabled());
+	EXPECT_EQ(gate.source(), BatchGate::Source::Parameter);
+}
+
+// A change of state is reported exactly once; off and on again before it is read is none.
+TEST(FormicBatchGate, ChangeIsReportedOnce)
+{
+	BatchGate gate;
+	gate.setDefault(true);
+	EXPECT_TRUE(gate.takeChange());
+	EXPECT_FALSE(gate.takeChange());
+
+	gate.command(false);
+	EXPECT_TRUE(gate.takeChange());
+	EXPECT_FALSE(gate.takeChange());
+
+	gate.command(true);
+	gate.command(false);
+	EXPECT_FALSE(gate.takeChange());
+	EXPECT_FALSE(gate.enabled());
 }

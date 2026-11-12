@@ -4,7 +4,7 @@
  *     q_out = Rz(psi) * q        p_out = Rz(psi) * p + t        v_out = Rz(psi) * v
  *
  * formic_vio_est anchors a new VIO epoch onto its own output. The EKF2 selector anchors each
- * estimator instance onto the published pose at a handover (FORMIC_EST_MODE 1).
+ * estimator instance onto the published pose at a handover.
  ****************************************************************************/
 
 #pragma once
