@@ -1,0 +1,7 @@
+menuconfig DRIVERS_FORMIC_STROBE_CAPTURE
+	bool "formic_strobe_capture"
+	default n
+	---help---
+		Timestamps the tracker camera strobe on its own capture pin
+		(output function Formic_Tracker_Strobe) and publishes each edge
+		as tracker_strobe, apart from camera_capture and camera_trigger.

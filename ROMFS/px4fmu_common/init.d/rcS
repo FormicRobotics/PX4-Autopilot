@@ -474,6 +474,12 @@ else
 		fi
 	fi
 
+	# Tracker camera strobe capture: its own pin and topic (tracker_strobe)
+	if param greater -s FSTRB_EN 0
+	then
+		formic_strobe_capture start
+	fi
+
 	#
 	# Commander
 	#

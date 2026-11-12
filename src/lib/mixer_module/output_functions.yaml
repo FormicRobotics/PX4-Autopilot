@@ -71,3 +71,9 @@ functions:
         condition: "RPM_CAP_ENABLE==0"
         text: "RPM needs to be enabled via RPM_CAP_ENABLE parameter."
       exclude_from_actuator_testing: true
+    Formic_Tracker_Strobe:
+      start: 2090
+      note:
+        condition: "FSTRB_EN==0"
+        text: "The tracker strobe capture needs to be enabled via the FSTRB_EN parameter."
+      exclude_from_actuator_testing: true
