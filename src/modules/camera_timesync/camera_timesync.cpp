@@ -103,8 +103,10 @@ bool CameraTimesync::init()
 		return false;
 	}
 
-	if (!_camera_trigger_sub.registerCallback()) {
-		PX4_ERR("camera_trigger callback registration failed");
+	_strobe_sub = (_param_src.get() == 0) ? &_camera_trigger_sub : &_tracker_strobe_sub;
+
+	if (!_strobe_sub->registerCallback()) {
+		PX4_ERR("%s callback registration failed", strobe_source_name());
 		return false;
 	}
 
@@ -127,7 +129,7 @@ void CameraTimesync::Run()
 	if (should_exit()) {
 		ScheduleClear();
 		_frame_stamp_sub.unregisterCallback();
-		_camera_trigger_sub.unregisterCallback();
+		_strobe_sub->unregisterCallback();
 		exit_and_cleanup();
 		return;
 	}
@@ -185,7 +187,7 @@ void CameraTimesync::drain_strobes()
 {
 	camera_trigger_s trigger;
 
-	while (_camera_trigger_sub.update(&trigger)) {
+	while (_strobe_sub->update(&trigger)) {
 		if (_last_strobe_time != 0 && trigger.timestamp > _last_strobe_time) {
 			update_strobe_period(trigger.timestamp - _last_strobe_time);
 		}
@@ -508,7 +510,8 @@ int CameraTimesync::print_status()
 	static const char *state_names[] = {"NO_TRIGGERS", "NO_FRAMES", "WAITING_DDS", "ACQUIRING", "LOCKED", "STALE"};
 	const char *state = (_state < 6) ? state_names[_state] : "?";
 
-	PX4_INFO("state: %s, apply: %s", state, (_locked && _param_apply.get()) ? "yes" : "no");
+	PX4_INFO("state: %s, apply: %s, strobe source: %s", state, (_locked && _param_apply.get()) ? "yes" : "no",
+		 strobe_source_name());
 	PX4_INFO("offset: camera %lld us, dds %lld us, camera - dds %lld us, drift %.1f ppm",
 		 (long long)_estimated_offset, (long long)_dds_offset,
 		 (long long)(static_cast<int64_t>(_estimated_offset) - _dds_offset), _drift_us_per_s);
@@ -563,13 +566,15 @@ int CameraTimesync::print_usage(const char *reason)
 ### Description
 Strobe-based clock sync between the companion computer and the flight controller.
 
-Matches each `camera_frame_stamp` from the companion with the `camera_trigger`
-strobe edge that camera_capture stamped, and estimates the clock offset from the
-pairs. The result is published as `camera_timesync_status`; while locked and
-CAMTS_APPLY=1 the uXRCE-DDS client uses it in place of its round-trip estimate.
+Matches each `camera_frame_stamp` from the companion with the strobe edge a
+capture driver stamped, and estimates the clock offset from the pairs. The
+result is published as `camera_timesync_status`. By default it only measures;
+while locked and CAMTS_APPLY=1 the uXRCE-DDS client uses it in place of its
+round-trip estimate.
 
-Requires CAM_CAP_FBACK=1, one PWM channel set to Camera_Capture, and the camera
-strobe wired to it.
+CAMTS_SRC selects the strobe: 1 is `tracker_strobe` (FSTRB_EN=1 and one PWM
+channel set to Formic_Tracker_Strobe), 0 is `camera_trigger` (CAM_CAP_FBACK=1
+and a Camera_Capture channel, or the camera_trigger driver in simulation).
 
 ### Examples
 $ camera_timesync start

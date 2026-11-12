@@ -1,9 +1,9 @@
 menuconfig MODULES_CAMERA_TIMESYNC
 	bool "camera_timesync"
 	default n
-	depends on DRIVERS_CAMERA_CAPTURE || DRIVERS_CAMERA_TRIGGER
+	depends on DRIVERS_CAMERA_CAPTURE || DRIVERS_CAMERA_TRIGGER || DRIVERS_FORMIC_STROBE_CAPTURE
 	---help---
 		Strobe-based clock sync: matches companion camera frame stamps
-		(camera_frame_stamp) with the camera_capture strobe edges
-		(camera_trigger) and publishes the measured clock offset for the
-		uXRCE-DDS client.
+		(camera_frame_stamp) with the strobe edges CAMTS_SRC selects
+		(tracker_strobe or camera_trigger) and publishes the measured
+		clock offset as camera_timesync_status.

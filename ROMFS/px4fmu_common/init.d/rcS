@@ -682,7 +682,8 @@ else
 	formic_velo_vis start
 
 	#
-	# Start the strobe-based camera timesync (needs camera_capture).
+	# Start the strobe-based camera timesync (needs the strobe source CAMTS_SRC
+	# selects: formic_strobe_capture or camera_capture).
 	#
 	if param greater -s CAMTS_EN 0
 	then

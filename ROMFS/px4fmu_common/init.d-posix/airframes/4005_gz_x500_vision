@@ -19,6 +19,8 @@ param set-default TRIG_INTERFACE 3
 param set-default TRIG_INTERVAL 33.33
 param set-default TRIG_ACT_TIME 10
 param set-default CAMTS_EN 1
+# No capture pins in simulation: the camera_trigger driver's edges are the strobe.
+param set-default CAMTS_SRC 0
 
 # Simulation only: the gz magnetometer is ideal, so there is nothing to learn. With the
 # mag-bias estimator on, a flight with a bad yaw/disturbance left a wrong CAL_MAG0_*OFF in

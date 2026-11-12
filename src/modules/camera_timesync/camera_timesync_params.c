@@ -35,9 +35,8 @@
  * Enable the strobe-based camera timesync.
  *
  * Matches companion camera frame stamps (camera_frame_stamp) with the
- * camera_capture strobe edges (camera_trigger) and estimates the clock
+ * strobe edges of the source CAMTS_SRC selects and estimates the clock
  * offset between the companion and the flight controller.
- * Needs CAM_CAP_FBACK=1 and a PWM channel set to Camera_Capture.
  *
  * @boolean
  * @reboot_required true
@@ -46,17 +45,35 @@
 PARAM_DEFINE_INT32(CAMTS_EN, 0);
 
 /**
+ * Strobe source of the camera timesync.
+ *
+ * 0: camera_trigger, the camera_capture strobe (CAM_CAP_FBACK=1 and a PWM
+ * channel set to Camera_Capture) or the camera_trigger driver in simulation.
+ * 1: tracker_strobe, the tracker camera strobe from formic_strobe_capture
+ * (FSTRB_EN=1 and a PWM channel set to Formic_Tracker_Strobe).
+ *
+ * @value 0 camera_trigger
+ * @value 1 tracker_strobe
+ * @reboot_required true
+ * @group Camera Timesync
+ */
+PARAM_DEFINE_INT32(CAMTS_SRC, 1);
+
+/**
  * Apply the camera timesync offset to the uXRCE-DDS client.
  *
  * 0: monitor only. The DDS client keeps its own round-trip estimate and
- * camera_timesync_status only reports the comparison.
+ * camera_timesync_status reports both offsets, so the companion can
+ * re-stamp what it receives itself.
  * 1: while locked, the DDS client converts every timestamp with the
- * strobe-based offset instead of the round-trip estimate.
+ * strobe-based offset instead of the round-trip estimate. This steps the
+ * stamps of every topic on the link at each lock and unlock, which makes
+ * other clock fits on the companion restart.
  *
  * @boolean
  * @group Camera Timesync
  */
-PARAM_DEFINE_INT32(CAMTS_APPLY, 1);
+PARAM_DEFINE_INT32(CAMTS_APPLY, 0);
 
 /**
  * Half-width of the strobe match window.

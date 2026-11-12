@@ -37,9 +37,11 @@
  * Strobe-based clock sync between the companion computer and the flight
  * controller.
  *
- * The camera strobe (FSTROBE) is wired to the flight controller's camera
- * capture input. camera_capture stamps every edge with the hrt clock and
- * publishes it as camera_trigger. The companion stamps the same frame with
+ * The camera strobe (FSTROBE) is wired to a capture input of the flight
+ * controller. A capture driver stamps every edge with the hrt clock and
+ * publishes it: formic_strobe_capture as tracker_strobe (the tracker camera,
+ * CAMTS_SRC 1), or camera_capture / camera_trigger as camera_trigger
+ * (CAMTS_SRC 0, used in simulation). The companion stamps the same frame with
  * its own clock (V4L2 start-of-frame time) and sends it as
  * camera_frame_stamp over uXRCE-DDS. The strobe and the frame are the
  * same physical event, so
@@ -48,7 +50,10 @@
  *
  * is a direct measurement of the clock offset, free of the link latency
  * that limits the round-trip DDS timesync. The filtered offset goes out as
- * camera_timesync_status; the uXRCE-DDS client applies it while locked.
+ * camera_timesync_status, next to the offset the uXRCE-DDS client used
+ * (dds_offset), so the companion can move received stamps onto the frame
+ * clock itself. With CAMTS_APPLY=1 the uXRCE-DDS client applies it to every
+ * topic while locked instead; the default only measures.
  */
 
 #pragma once
@@ -109,6 +114,7 @@ private:
 	void lock_from_samples();
 	void unlock(const char *reason);
 	void publish_status();
+	const char *strobe_source_name() const { return (_strobe_sub == &_camera_trigger_sub) ? "camera_trigger" : "tracker_strobe"; }
 
 	// Strobe ring, newest entry at (_strobe_head - 1).
 	Strobe _strobes[STROBE_RING_SIZE] {};
@@ -146,13 +152,18 @@ private:
 	camera_timesync_status_s _status{};
 
 	uORB::SubscriptionCallbackWorkItem _frame_stamp_sub{this, ORB_ID(camera_frame_stamp)};
+	// The two strobe sources. Only the one CAMTS_SRC selects at start gets its callback
+	// registered and is read: _strobe_sub points at it.
 	uORB::SubscriptionCallbackWorkItem _camera_trigger_sub{this, ORB_ID(camera_trigger)};
+	uORB::SubscriptionCallbackWorkItem _tracker_strobe_sub{this, ORB_ID(tracker_strobe)};
+	uORB::SubscriptionCallbackWorkItem *_strobe_sub{&_tracker_strobe_sub};
 	// timesync_status is a multi-instance topic: the DDS client and MAVLink each publish one.
 	uORB::Subscription _timesync_status_subs[2] {{ORB_ID(timesync_status), 0}, {ORB_ID(timesync_status), 1}};
 	uORB::Subscription _parameter_update_sub{ORB_ID(parameter_update)};
 	uORB::Publication<camera_timesync_status_s> _status_pub{ORB_ID(camera_timesync_status)};
 
 	DEFINE_PARAMETERS(
+		(ParamInt<px4::params::CAMTS_SRC>) _param_src,
 		(ParamInt<px4::params::CAMTS_APPLY>) _param_apply,
 		(ParamInt<px4::params::CAMTS_WIN_US>) _param_window_us,
 		(ParamInt<px4::params::CAMTS_MAX_DEV>) _param_max_dev_us,
