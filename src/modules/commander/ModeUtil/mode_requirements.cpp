@@ -54,7 +54,8 @@ void getModeRequirements(uint8_t vehicle_type, failsafe_flags_s &flags)
 	flags.mode_req_local_alt = 0;
 	flags.mode_req_mission = 0;
 	flags.mode_req_offboard_signal = 0;
-	flags.mode_req_formic_tracker_signal = 0;
+	flags.mode_req_formic_vis_servo_signal = 0;
+	flags.mode_req_formic_velo_vis_signal = 0;
 	flags.mode_req_home_position = 0;
 	flags.mode_req_wind_and_flight_time_compliance = 0;
 	flags.mode_req_prevent_arming = 0;
@@ -91,13 +92,24 @@ void getModeRequirements(uint8_t vehicle_type, failsafe_flags_s &flags)
 	setRequirement(vehicle_status_s::NAVIGATION_STATE_POSITION_SLOW, flags.mode_req_local_position_relaxed);
 	setRequirement(vehicle_status_s::NAVIGATION_STATE_POSITION_SLOW, flags.mode_req_manual_control);
 
-	// NAVIGATION_STATE_FORMIC_TRACKER - never stick-driven (no mode_req_manual_control),
-	// gated instead on a live formic_tracker_setpoint stream (mode_req_formic_tracker_signal,
+	// NAVIGATION_STATE_FORMIC_VIS_SERVO - never stick-driven (no mode_req_manual_control),
+	// gated instead on a live formic_vis_servo_setpoint stream (mode_req_formic_vis_servo_signal,
 	// same mechanism as NAVIGATION_STATE_OFFBOARD's mode_req_offboard_signal below).
-	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER, flags.mode_req_angular_velocity);
-	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER, flags.mode_req_attitude);
-	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER, flags.mode_req_local_alt);
-	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER, flags.mode_req_formic_tracker_signal);
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_VIS_SERVO, flags.mode_req_angular_velocity);
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_VIS_SERVO, flags.mode_req_attitude);
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_VIS_SERVO, flags.mode_req_local_alt);
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_VIS_SERVO, flags.mode_req_formic_vis_servo_signal);
+
+	// NAVIGATION_STATE_FORMIC_VELO_VIS - same shape as FORMIC_VIS_SERVO above,
+	// but it goes through mc_pos_control's velocity controller (see
+	// control_mode.cpp), which needs a valid local position/velocity estimate
+	// to close the loop, hence mode_req_local_position_relaxed in addition to
+	// mode_req_local_alt.
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_VELO_VIS, flags.mode_req_angular_velocity);
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_VELO_VIS, flags.mode_req_attitude);
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_VELO_VIS, flags.mode_req_local_alt);
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_VELO_VIS, flags.mode_req_local_position_relaxed);
+	setRequirement(vehicle_status_s::NAVIGATION_STATE_FORMIC_VELO_VIS, flags.mode_req_formic_velo_vis_signal);
 
 	// NAVIGATION_STATE_AUTO_MISSION
 	setRequirement(vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION, flags.mode_req_angular_velocity);

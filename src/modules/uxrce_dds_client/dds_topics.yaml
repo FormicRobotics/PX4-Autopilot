@@ -158,6 +158,14 @@ publications:
   type: px4_msgs::msg::ManualControlSwitches
   rate_limit: 50
 
+- topic: /fmu/out/formic_vis_servo_status
+  type: px4_msgs::msg::FormicVisServoStatus
+  rate_limit: 2
+
+- topic: /fmu/out/formic_velo_vis_status
+  type: px4_msgs::msg::FormicVeloVisStatus
+  rate_limit: 2
+
 # Create uORB::Publication
 subscriptions:
 # - topic: /fmu/in/register_ext_component_request
@@ -220,11 +228,17 @@ subscriptions:
 - topic: /fmu/in/vehicle_command
   type: px4_msgs::msg::VehicleCommand
 
-- topic: /fmu/in/formic_tracker_setpoint
-  type: px4_msgs::msg::FormicTrackerSetpoint
+- topic: /fmu/in/formic_vis_servo_setpoint
+  type: px4_msgs::msg::FormicVisServoSetpoint
+
+- topic: /fmu/in/formic_velo_vis_setpoint
+  type: px4_msgs::msg::FormicVeloVisSetpoint
 
 - topic: /fmu/in/camera_frame_stamp
   type: px4_msgs::msg::CameraFrameStamp
+
+- topic: /fmu/in/formic_target_box
+  type: px4_msgs::msg::FormicTargetBox
 
 - topic: /fmu/in/vehicle_command_mode_executor
   type: px4_msgs::msg::VehicleCommand

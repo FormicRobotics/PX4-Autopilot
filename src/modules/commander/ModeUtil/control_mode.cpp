@@ -179,13 +179,29 @@ void getVehicleControlMode(uint8_t nav_state, uint8_t vehicle_type,
 		vehicle_control_mode.flag_control_allocation_enabled = true;
 		break;
 
-	case vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER:
-		// Thrust and attitude are fully computed by the formic_tracker module
-		// itself (from formic_tracker_setpoint), not by mc_pos_control - same
+	case vehicle_status_s::NAVIGATION_STATE_FORMIC_VIS_SERVO:
+		// Thrust and attitude are fully computed by the formic_vis_servo module
+		// itself (from formic_vis_servo_setpoint), not by mc_pos_control - same
 		// flag set as NAVIGATION_STATE_OFFBOARD's offboard_control_mode.attitude
-		// branch above (no altitude/climb_rate/manual
-		// flags: nothing here should let mc_pos_control's z-loop fight for
+		// branch above, not ALTCTL's (no altitude/climb_rate/manual flags:
+		// nothing here should let mc_pos_control's z-loop fight for
 		// thrust_body).
+		vehicle_control_mode.flag_control_attitude_enabled = true;
+		vehicle_control_mode.flag_control_rates_enabled = true;
+		vehicle_control_mode.flag_control_allocation_enabled = true;
+		break;
+
+	case vehicle_status_s::NAVIGATION_STATE_FORMIC_VELO_VIS:
+		// Unlike FORMIC_VIS_SERVO, this mode wants real closed-loop velocity
+		// control on all 3 axes, so it deliberately feeds mc_pos_control's own
+		// velocity controller instead of bypassing it - same flag set as
+		// NAVIGATION_STATE_OFFBOARD's offboard_control_mode.velocity branch
+		// above (no flag_control_position_enabled: formic_velo_vis_setpoint
+		// carries a velocity demand, not a position one).
+		vehicle_control_mode.flag_control_velocity_enabled = true;
+		vehicle_control_mode.flag_control_altitude_enabled = true;
+		vehicle_control_mode.flag_control_climb_rate_enabled = true;
+		vehicle_control_mode.flag_control_acceleration_enabled = true;
 		vehicle_control_mode.flag_control_attitude_enabled = true;
 		vehicle_control_mode.flag_control_rates_enabled = true;
 		vehicle_control_mode.flag_control_allocation_enabled = true;

@@ -75,7 +75,9 @@ void LoggedTopics::add_default_topics()
 	add_optional_topic("formic_ekf_vel_reset");
 	add_optional_topic("formic_control_state", 20);
 	add_optional_topic("vehicle_visual_odometry", 30);
-	add_topic("formic_tracker_setpoint");
+	add_topic("formic_vis_servo_setpoint");
+	add_topic("formic_velo_vis_setpoint");
+	add_topic("formic_target_box");
 
 	add_optional_topic("follow_target", 500);
 	add_optional_topic("follow_target_estimator", 200);

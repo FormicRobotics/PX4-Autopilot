@@ -571,6 +571,16 @@ struct msp_rendor_formicc_vio_status_t {
 
 
 
+// One corner of the tracker's target box: a one-character MSP_DP_WRITE_STRING.
+struct msp_rendor_formic_target_box_t {
+	uint8_t subCommand = 0x03; // 0x03 subcommand write string. fixed
+	uint8_t screenYPosition;
+	uint8_t screenXPosition;
+	uint8_t iconAttrs = 0x00;
+	char str[2]; // the corner character and its terminator
+} __attribute__((packed));
+
+
 // values for msp_nav_status_t.mode
 #define MSP_NAV_STATUS_MODE_NONE   0
 #define MSP_NAV_STATUS_MODE_HOLD   1

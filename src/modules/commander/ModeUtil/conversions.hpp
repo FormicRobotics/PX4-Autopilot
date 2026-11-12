@@ -68,7 +68,9 @@ static inline navigation_mode_t navigation_mode(uint8_t nav_state)
 
 	case vehicle_status_s::NAVIGATION_STATE_STAB: return navigation_mode_t::stab;
 
-	case vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER: return navigation_mode_t::formic_tracker;
+	case vehicle_status_s::NAVIGATION_STATE_FORMIC_VIS_SERVO: return navigation_mode_t::formic_vis_servo;
+
+	case vehicle_status_s::NAVIGATION_STATE_FORMIC_VELO_VIS: return navigation_mode_t::formic_velo_vis;
 
 	case vehicle_status_s::NAVIGATION_STATE_AUTO_TAKEOFF: return navigation_mode_t::auto_takeoff;
 

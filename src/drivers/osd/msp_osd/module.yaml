@@ -48,6 +48,7 @@ parameters:
                 27: TOTAL_ACTIVATED_TIME
                 28: BARO_ALTITUDE
                 29: FORMIC_VIO_STATUS
+                30: FORMIC_TARGET_BOX
 
             default: 16383
 
@@ -128,3 +129,54 @@ parameters:
                 0: Ardupilotconfig
                 1: Autoconfig
             default: 0
+
+        # Tracker target box: where the tracker's image lands on the OSD grid
+        OSD_TBOX_LEFT:
+            description:
+                short: OSD column of the tracker image's left edge
+                long: |
+                    The tracker's target box (FORMIC_TARGET_BOX in OSD_SYMBOLS) is mapped linearly
+                    from image pixels to OSD cells: column = OSD_TBOX_LEFT +
+                    (x / image width) * (OSD_TBOX_RIGHT - OSD_TBOX_LEFT). Left 0 and right equal
+                    to the number of OSD columns fits the image to the whole screen; move the two
+                    when the video shown in the goggles is cropped or shifted against the
+                    tracker's image, swap them when it is mirrored.
+            type: float
+            decimal: 1
+            min: -100
+            max: 200
+            default: 0
+
+        OSD_TBOX_RIGHT:
+            description:
+                short: OSD column of the tracker image's right edge
+                long: |
+                    See OSD_TBOX_LEFT. The default is the 53 column HD grid.
+            type: float
+            decimal: 1
+            min: -100
+            max: 200
+            default: 53
+
+        OSD_TBOX_TOP:
+            description:
+                short: OSD row of the tracker image's top edge
+                long: |
+                    Row = OSD_TBOX_TOP + (y / image height) * (OSD_TBOX_BOTTOM - OSD_TBOX_TOP).
+                    See OSD_TBOX_LEFT.
+            type: float
+            decimal: 1
+            min: -100
+            max: 200
+            default: 0
+
+        OSD_TBOX_BOTTOM:
+            description:
+                short: OSD row of the tracker image's bottom edge
+                long: |
+                    See OSD_TBOX_TOP. The default is the 20 row HD grid.
+            type: float
+            decimal: 1
+            min: -100
+            max: 200
+            default: 20

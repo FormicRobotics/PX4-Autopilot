@@ -61,6 +61,7 @@
 #include <uORB/topics/formic_ev_flag.h>
 #include <uORB/topics/formic_vio_est_status.h>
 #include <uORB/topics/formic_pos_req.h>
+#include <uORB/topics/formic_target_box.h>
 
 #include "MspV1.hpp"
 #include "MessageDisplay/MessageDisplay.hpp"
@@ -113,6 +114,7 @@ enum SymbolIndex : uint8_t {
 	TOTAL_ACTIVATED_TIME	= 27,
 	BARO_ALTITUDE		= 28,
 	FORMIC_VIO_STATUS	= 29,
+	FORMIC_TARGET_BOX	= 30,
 };
 
 class MspOsd : public ModuleBase<MspOsd>, public ModuleParams, public px4::ScheduledWorkItem
@@ -187,6 +189,13 @@ private:
 	uORB::Subscription _formic_vio_est_status_sub{ORB_ID(formic_vio_est_status)};
 	uORB::Subscription _formic_pos_req_sub{ORB_ID(formic_pos_req)};
 	bool _formic_vio_mode{false}; ///< FORMIC_EST_MODE 1: the VIO status comes from formic_vio_est
+	uORB::Subscription _formic_target_box_sub{ORB_ID(formic_target_box)};
+
+	// The tracker's last box and when it got here on this clock: the tracker sends nothing
+	// for a frame without a lock, so the box is dropped from the screen once it is this old.
+	static constexpr hrt_abstime FORMIC_TARGET_BOX_TIMEOUT{500_ms};
+	formic_target_box_s _formic_target_box{};
+	hrt_abstime _formic_target_box_received{0};
 
 	// local heartbeat
 	bool _heartbeat{false};
@@ -202,7 +211,11 @@ private:
 		(ParamInt<px4::params::OSD_DWELL_TIME>) _param_osd_dwell_time,
 		(ParamInt<px4::params::OSD_LOG_LEVEL>) _param_osd_log_level,
 		(ParamInt<px4::params::OSD_RC_STICK>) _param_osd_rc_stick,
-		(ParamInt<px4::params::OSD_FORMAT>) _param_osd_format
+		(ParamInt<px4::params::OSD_FORMAT>) _param_osd_format,
+		(ParamFloat<px4::params::OSD_TBOX_LEFT>) _param_osd_tbox_left,
+		(ParamFloat<px4::params::OSD_TBOX_RIGHT>) _param_osd_tbox_right,
+		(ParamFloat<px4::params::OSD_TBOX_TOP>) _param_osd_tbox_top,
+		(ParamFloat<px4::params::OSD_TBOX_BOTTOM>) _param_osd_tbox_bottom
 	)
 
 	// metadata

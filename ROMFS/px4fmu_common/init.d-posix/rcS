@@ -301,10 +301,15 @@ else
 	formic_watchdog_ev start
 fi
 
-# formic_tracker: NAVIGATION_STATE_FORMIC_TRACKER's attitude+climb-rate
+# formic_vis_servo: NAVIGATION_STATE_FORMIC_VIS_SERVO's attitude+climb-rate
 # setpoint generator. Always started; it idles and publishes nothing unless
 # that nav_state is actually active.
-formic_tracker start
+formic_vis_servo start
+
+# formic_velo_vis: NAVIGATION_STATE_FORMIC_VELO_VIS's trajectory-setpoint
+# generator. Always started; it idles and publishes nothing unless that
+# nav_state is actually active.
+formic_velo_vis start
 
 if ! pwm_out_sim start -m sim
 then

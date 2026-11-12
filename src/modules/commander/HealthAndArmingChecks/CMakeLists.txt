@@ -59,7 +59,8 @@ px4_add_library(health_and_arming_checks
 	checks/missionCheck.cpp
 	checks/modeCheck.cpp
 	checks/navigatorCheck.cpp
-	checks/formicTrackerCheck.cpp
+	checks/formicVisServoCheck.cpp
+	checks/formicVeloVisCheck.cpp
 	checks/offboardCheck.cpp
 	checks/openDroneIDCheck.cpp
 	checks/parachuteCheck.cpp

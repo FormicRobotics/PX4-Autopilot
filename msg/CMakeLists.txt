@@ -286,7 +286,11 @@ set(msg_files
 	FormicImuBatch.msg
 	FormicPosReq.msg
 	FormicVioEstStatus.msg
-	FormicTrackerSetpoint.msg
+	FormicVisServoSetpoint.msg
+	FormicVisServoStatus.msg
+	FormicVeloVisSetpoint.msg
+	FormicVeloVisStatus.msg
+	FormicTargetBox.msg
 )
 
 list(SORT msg_files)

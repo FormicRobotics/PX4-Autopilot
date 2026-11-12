@@ -405,38 +405,34 @@
                             "description": "Position mode"
                         },
                         "3": {
-                            "name": "fallback_formic_alt_hold",
-                            "description": "FormicAltHold mode"
-                        },
-                        "4": {
                             "name": "fallback_altctrl",
                             "description": "Altitude mode"
                         },
-                        "5": {
+                        "4": {
                             "name": "fallback_stabilized",
                             "description": "Stabilized mode"
                         },
-                        "6": {
+                        "5": {
                             "name": "hold",
                             "description": "Hold"
                         },
-                        "7": {
+                        "6": {
                             "name": "rtl",
                             "description": "RTL"
                         },
-                        "8": {
+                        "7": {
                             "name": "land",
                             "description": "Land"
                         },
-                        "9": {
+                        "8": {
                             "name": "descend",
                             "description": "Descend"
                         },
-                        "10": {
+                        "9": {
                             "name": "disarm",
                             "description": "disarm"
                         },
-                        "11": {
+                        "10": {
                             "name": "terminate",
                             "description": "terminate"
                         }
@@ -617,8 +613,12 @@
                             "description": "Turtle"
                         },
                         "27": {
-                            "name": "formic_tracker",
-                            "description": "FormicTracker"
+                            "name": "formic_vis_servo",
+                            "description": "FormicVisServo"
+                        },
+                        "28": {
+                            "name": "formic_velo_vis",
+                            "description": "FormicVeloVis"
                         },
                         "255": {
                             "name": "unknown",

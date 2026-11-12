@@ -662,11 +662,18 @@ else
 	fi
 
 	#
-	# Start the formic_tracker module (NAVIGATION_STATE_FORMIC_TRACKER's
+	# Start the formic_vis_servo module (NAVIGATION_STATE_FORMIC_VIS_SERVO's
 	# attitude+climb-rate setpoint generator - idles/publishes nothing
 	# unless that nav_state is active).
 	#
-	formic_tracker start
+	formic_vis_servo start
+
+	#
+	# Start the formic_velo_vis module (NAVIGATION_STATE_FORMIC_VELO_VIS's
+	# trajectory-setpoint generator - idles/publishes nothing unless that
+	# nav_state is active).
+	#
+	formic_velo_vis start
 
 	#
 	# Start the strobe-based camera timesync (needs camera_capture).

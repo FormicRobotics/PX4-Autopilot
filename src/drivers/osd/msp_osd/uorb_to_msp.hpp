@@ -65,6 +65,7 @@
 #include <uORB/topics/formic_ev_flag.h>
 #include <uORB/topics/formic_vio_est_status.h>
 #include <uORB/topics/formic_pos_req.h>			
+#include <uORB/topics/formic_target_box.h>			
 // PX4 events interface
 #include <px4_platform_common/events.h>
 
@@ -160,5 +161,21 @@ msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_
 // FORMIC_EST_MODE 1: POS, POS-DEG, WAIT or DEGRAD from the VIO instance, the mode and the position request
 msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_vio_est_status_s &vio,
 		const vehicle_status_s &vehicle_status, const formic_pos_req_s &pos_req);
+
+// Where the edges of the tracker's image land on the OSD character grid: the linear map from
+// image pixels to OSD cells is col = left + (x / frame_width) * (right - left), and the same
+// for rows with top / bottom.
+struct FormicTargetBoxMap {
+	float left;	// OSD column of the image's left edge
+	float right;	// OSD column of the image's right edge
+	float top;	// OSD row of the image's top edge
+	float bottom;	// OSD row of the image's bottom edge
+};
+
+// Corner markers of the tracker's target box, mapped from image pixels to OSD cells.
+// Fills `corners` and returns how many to send: 4, 2 when the box is one row high, 0 when
+// the box or the map is unusable.
+int construct_rendor_FORMIC_TARGET_BOX(const formic_target_box_s &box, const FormicTargetBoxMap &map,
+				       msp_rendor_formic_target_box_t corners[4]);
 
 } // namespace msp_osd

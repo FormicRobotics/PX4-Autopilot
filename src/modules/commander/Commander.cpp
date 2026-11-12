@@ -929,8 +929,11 @@
 				 } else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_OFFBOARD) {
 					 desired_nav_state = vehicle_status_s::NAVIGATION_STATE_OFFBOARD;
 
-				 } else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_FORMIC_TRACKER) {
-					 desired_nav_state = vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER;
+				 } else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_FORMIC_VIS_SERVO) {
+					 desired_nav_state = vehicle_status_s::NAVIGATION_STATE_FORMIC_VIS_SERVO;
+
+				 } else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_FORMIC_VELO_VIS) {
+					 desired_nav_state = vehicle_status_s::NAVIGATION_STATE_FORMIC_VELO_VIS;
 				 }
  
 			 } else {

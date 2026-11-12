@@ -1,3 +1,0 @@
-menuconfig MODULES_FORMIC_TRACKER
-	bool "formic tracker"
-	default n

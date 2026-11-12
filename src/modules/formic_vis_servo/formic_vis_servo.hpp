@@ -10,34 +10,35 @@
 #include <uORB/Subscription.hpp>
 #include <uORB/Publication.hpp>
 #include <uORB/topics/parameter_update.h>
-#include <uORB/topics/formic_tracker_setpoint.h>
+#include <uORB/topics/formic_vis_servo_setpoint.h>
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/hover_thrust_estimate.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
+#include <uORB/topics/formic_vis_servo_status.h>
 
 // Drivers
 #include <drivers/drv_hrt.h>
 
-// NAVIGATION_STATE_FORMIC_TRACKER's attitude+thrust generator. This is the
+// NAVIGATION_STATE_FORMIC_VIS_SERVO's attitude+thrust generator. This is the
 // FC-side port of what offboard_control.py's "ATTITUDE" control mode used to
 // do from off-board over DDS (see that file's publish_attitude_setpoint() and
-// its PID class) - roll/pitch are commanded open-loop from formic_tracker_setpoint,
+// its PID class) - roll/pitch are commanded open-loop from formic_vis_servo_setpoint,
 // only the vertical axis (vz) is closed-loop here, same as that Python node.
 //
 // Publishes vehicle_attitude_setpoint directly (mc_att_control already
 // subscribes it unconditionally) and deliberately bypasses mc_pos_control:
-// formic_tracker_setpoint already carries final tilt angles + climb rate, not
+// formic_vis_servo_setpoint already carries final tilt angles + climb rate, not
 // a position/acceleration demand for mc_pos_control to re-invert. See
-// ModeUtil/control_mode.cpp's NAVIGATION_STATE_FORMIC_TRACKER case for the
+// ModeUtil/control_mode.cpp's NAVIGATION_STATE_FORMIC_VIS_SERVO case for the
 // control_mode flags this relies on.
 //
 // Entry/runtime gating (only run with a live command, fall back to
-// FormicAltHold if the stream goes stale) lives in commander - see
-// HealthAndArmingChecks/checks/formicTrackerCheck.cpp and
+// ALTCTL if the stream goes stale) lives in commander - see
+// HealthAndArmingChecks/checks/formicVisServoCheck.cpp and
 // failsafe/failsafe.cpp's checkModeFallback(). This module itself just stays
-// idle and publishes nothing whenever nav_state != FORMIC_TRACKER.
+// idle and publishes nothing whenever nav_state != FORMIC_VIS_SERVO.
 //
 // FMTRK_HOVER_FB (not MPC_THR_HOVER) is the vz-loop's hover-thrust fallback
 // for whenever hover_thrust_estimate isn't valid yet (always true right at
@@ -47,16 +48,16 @@
 // SITL testing (regress9) confirmed the gap: with the generic ~0.6 default
 // and the old, weaker VZ_P/I/D, the vehicle never built enough net lift to
 // leave the ground before COM_DISARM_LAND kicked in.
-class FormicTracker : public ModuleBase<FormicTracker>,
+class FormicVisServo : public ModuleBase<FormicVisServo>,
 	public ModuleParams,
 	public px4::ScheduledWorkItem
 {
 public:
-	FormicTracker();
-	~FormicTracker() override;
+	FormicVisServo();
+	~FormicVisServo() override;
 
 	static int task_spawn(int argc, char *argv[]);
-	static FormicTracker *instantiate(int argc, char *argv[]);
+	static FormicVisServo *instantiate(int argc, char *argv[]);
 	static int custom_command(int argc, char *argv[]);
 	static int print_usage(const char *reason = nullptr);
 	int print_status() override;
@@ -68,25 +69,28 @@ private:
 	// What Run() did on its last tick. Every change is logged (PX4_INFO /
 	// PX4_WARN, so it lands in the ulog's logged messages), to tell apart
 	// the ways this module can end up publishing nothing while nav_state is
-	// FORMIC_TRACKER.
+	// FORMIC_VIS_SERVO.
 	enum class TickResult : uint8_t {
-		Inactive,      ///< nav_state != FORMIC_TRACKER
+		Inactive,      ///< nav_state != FORMIC_VIS_SERVO
 		EntryTick,     ///< first active tick, state reset, nothing published
-		NoSetpoint,    ///< formic_tracker_setpoint copy() failed
-		ZeroTimestamp, ///< formic_tracker_setpoint copied but timestamp == 0
+		NoSetpoint,    ///< formic_vis_servo_setpoint copy() failed
+		ZeroTimestamp, ///< formic_vis_servo_setpoint copied but timestamp == 0
 		Published,     ///< vehicle_attitude_setpoint published
 	};
 	static const char *tick_result_str(TickResult result);
-	void set_tick_result(TickResult result, const formic_tracker_setpoint_s *setpoint = nullptr);
+	void set_tick_result(TickResult result, const formic_vis_servo_setpoint_s *setpoint = nullptr);
 
 	void run_once();
 	void parameters_update(bool force = false);
 	void reset_on_entry(float current_yaw);
-	void publish_attitude_setpoint(const formic_tracker_setpoint_s &setpoint, float dt, float vz_actual);
+	void publish_attitude_setpoint(const formic_vis_servo_setpoint_s &setpoint, float dt, float vz_actual, float current_yaw);
+	// FMTRK_TILT_MAX/VZ_MAX out to the off-board controller, ~1 Hz in every
+	// nav_state (it needs them before the mode is entered).
+	void publish_status();
 
 	// --- Subscriptions ---
 	uORB::Subscription _parameter_update_sub{ORB_ID(parameter_update)};
-	uORB::Subscription _formic_tracker_setpoint_sub{ORB_ID(formic_tracker_setpoint)};
+	uORB::Subscription _formic_vis_servo_setpoint_sub{ORB_ID(formic_vis_servo_setpoint)};
 	uORB::Subscription _vehicle_local_position_sub{ORB_ID(vehicle_local_position)};
 	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
 	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
@@ -94,9 +98,11 @@ private:
 
 	// --- Publications ---
 	uORB::Publication<vehicle_attitude_setpoint_s> _vehicle_attitude_setpoint_pub{ORB_ID(vehicle_attitude_setpoint)};
+	uORB::Publication<formic_vis_servo_status_s> _formic_vis_servo_status_pub{ORB_ID(formic_vis_servo_status)};
+	hrt_abstime _last_status_pub{0};
 
 	// --- State ---
-	bool _was_active{false}; ///< nav_state == FORMIC_TRACKER on the previous tick
+	bool _was_active{false}; ///< nav_state == FORMIC_VIS_SERVO on the previous tick
 	hrt_abstime _last_run{0};
 	float _yaw_setpoint{0.f}; ///< heading-hold setpoint, integrated from psi_dot_cmd
 	float _hover_thrust{0.5f};

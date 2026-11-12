@@ -546,6 +546,27 @@ void MspOsd::Run()
 		}
 	}
 
+	// MSP_FORMIC_TARGET_BOX
+	{
+		if (_formic_target_box_sub.update(&_formic_target_box)) {
+			_formic_target_box_received = hrt_absolute_time();
+		}
+
+		if (enabled(SymbolIndex::FORMIC_TARGET_BOX) && _formic_target_box_received != 0
+		    && hrt_elapsed_time(&_formic_target_box_received) < FORMIC_TARGET_BOX_TIMEOUT) {
+			const msp_osd::FormicTargetBoxMap map{
+				_param_osd_tbox_left.get(), _param_osd_tbox_right.get(),
+				_param_osd_tbox_top.get(), _param_osd_tbox_bottom.get()};
+
+			msp_rendor_formic_target_box_t corners[4];
+			const int count = msp_osd::construct_rendor_FORMIC_TARGET_BOX(_formic_target_box, map, corners);
+
+			for (int i = 0; i < count; i++) {
+				this->Send(MSP_CMD_DISPLAYPORT, &corners[i], sizeof(msp_rendor_formic_target_box_t));
+			}
+		}
+	}
+
 	// MSP_MOTOR_TELEMETRY
 	{
 

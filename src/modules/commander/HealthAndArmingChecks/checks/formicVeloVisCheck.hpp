@@ -36,39 +36,39 @@
 #include "../Common.hpp"
 
 #include <uORB/Subscription.hpp>
-#include <uORB/topics/formic_tracker_setpoint.h>
-#include <uORB/topics/vehicle_attitude_setpoint.h>
+#include <uORB/topics/formic_velo_vis_setpoint.h>
+#include <uORB/topics/trajectory_setpoint.h>
 
-// Entry/runtime gate for NAVIGATION_STATE_FORMIC_TRACKER: mirrors OffboardChecks,
-// but keyed off the formic_tracker_setpoint stream itself instead of a separate
-// offboard_control_mode heartbeat - the u-vector message doubles as its own
-// liveness signal.
+// Entry/runtime gate for NAVIGATION_STATE_FORMIC_VELO_VIS: same shape as
+// FormicVisServoChecks, but keyed off the formic_velo_vis_setpoint stream
+// and additionally requiring a valid local velocity estimate (mc_pos_control's
+// velocity controller needs it to close the loop - same requirement
+// OffboardChecks applies to offboard_control_mode.velocity).
 //
-// It also watches the mode's output: while nav_state is FORMIC_TRACKER, the
-// formic_tracker module must keep publishing vehicle_attitude_setpoint. If it
-// stops for FMTRK_LOSS_T, the vehicle would otherwise keep flying the last
-// attitude setpoint open-loop (seen once in SITL, when an HRT race silently
-// dropped the module's interval timer), so the signal-lost flag is latched and
-// commander falls back to FormicAltHold. The latch holds until the user
-// selects another mode or disarms - re-entering a mode whose generator is dead
-// would just repeat the open-loop window every FMTRK_LOSS_T.
-class FormicTrackerChecks : public HealthAndArmingCheckBase
+// It also watches the mode's output: while nav_state is FORMIC_VELO_VIS,
+// this module must keep publishing trajectory_setpoint. If it stops for
+// FVV_LOSS_T, mc_pos_control would otherwise keep tracking the last velocity
+// setpoint open-loop, so the signal-lost flag is latched and commander falls
+// back to ALTCTL. The latch holds until the user selects another mode
+// or disarms - re-entering a mode whose generator is dead would just repeat
+// the open-loop window every FVV_LOSS_T.
+class FormicVeloVisChecks : public HealthAndArmingCheckBase
 {
 public:
-	FormicTrackerChecks() = default;
-	~FormicTrackerChecks() = default;
+	FormicVeloVisChecks() = default;
+	~FormicVeloVisChecks() = default;
 
 	void checkAndReport(const Context &context, Report &reporter) override;
 
 private:
-	uORB::Subscription _formic_tracker_setpoint_sub{ORB_ID(formic_tracker_setpoint)};
-	uORB::Subscription _vehicle_attitude_setpoint_sub{ORB_ID(vehicle_attitude_setpoint)};
+	uORB::Subscription _formic_velo_vis_setpoint_sub{ORB_ID(formic_velo_vis_setpoint)};
+	uORB::Subscription _trajectory_setpoint_sub{ORB_ID(trajectory_setpoint)};
 
-	bool _was_active{false};          ///< nav_state == FORMIC_TRACKER on the previous check
-	hrt_abstime _last_output{0};      ///< newest vehicle_attitude_setpoint seen while active (starts at mode entry)
-	bool _output_stalled{false};      ///< latched: no vehicle_attitude_setpoint while active
+	bool _was_active{false};          ///< nav_state == FORMIC_VELO_VIS on the previous check
+	hrt_abstime _last_output{0};      ///< newest trajectory_setpoint seen while active (starts at mode entry)
+	bool _output_stalled{false};      ///< latched: no trajectory_setpoint while active
 
 	DEFINE_PARAMETERS_CUSTOM_PARENT(HealthAndArmingCheckBase,
-					(ParamFloat<px4::params::FMTRK_LOSS_T>) _param_formic_trk_loss_t
+					(ParamFloat<px4::params::FVV_LOSS_T>) _param_formic_velo_vis_loss_t
 				       );
 };

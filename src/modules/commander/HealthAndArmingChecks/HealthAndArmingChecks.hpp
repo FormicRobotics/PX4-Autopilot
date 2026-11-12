@@ -75,7 +75,8 @@
 #include "checks/offboardCheck.hpp"
 #include "checks/openDroneIDCheck.hpp"
 #include "checks/externalChecks.hpp"
-#include "checks/formicTrackerCheck.hpp"
+#include "checks/formicVisServoCheck.hpp"
+#include "checks/formicVeloVisCheck.hpp"
 
 class HealthAndArmingChecks : public ModuleParams
 {
@@ -162,7 +163,8 @@ private:
 	RcAndDataLinkChecks _rc_and_data_link_checks;
 	VtolChecks _vtol_checks;
 	OffboardChecks _offboard_checks;
-	FormicTrackerChecks _formic_tracker_checks;
+	FormicVisServoChecks _formic_vis_servo_checks;
+	FormicVeloVisChecks _formic_velo_vis_checks;
 
 
 #ifndef CONSTRAINED_FLASH
@@ -194,8 +196,9 @@ private:
 		&_home_position_checks,
 		&_mission_checks,
 		&_offboard_checks, // must be after _estimator_checks
-		&_formic_tracker_checks, // must be after _estimator_checks
-		&_mode_checks, // must be after _estimator_checks, _home_position_checks, _mission_checks, _offboard_checks, _formic_tracker_checks, _external_checks
+		&_formic_vis_servo_checks, // must be after _estimator_checks
+		&_formic_velo_vis_checks, // must be after _estimator_checks
+		&_mode_checks, // must be after _estimator_checks, _home_position_checks, _mission_checks, _offboard_checks, _formic_vis_servo_checks, _formic_velo_vis_checks, _external_checks
 		&_open_drone_id_checks,
 		&_parachute_checks,
 		&_power_checks,

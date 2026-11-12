@@ -253,6 +253,21 @@ bool UserModeIntention::evReadyForPosition()
 		       && _formic_vio_est_status_sub.copy(&vio) && (now < vio.timestamp + 200_ms) && vio.healthy;
 	}
 
+	// This gate is about DEAD RECKONING on vision: on the VIO vehicle, entering a position
+	// mode before EKF2 has converged onto the EV feed would fly on a stale estimate, so we
+	// wait for formic_watchdog_ev to say the vision stream arrived and the filters agree.
+	//
+	// None of that applies when the EKF has a GNSS-backed global position - there is no
+	// vision estimate to converge onto and nothing to wait for. In SITL in particular the
+	// vehicle flies on GPS and formic_watchdog_ev does not run at all, so formic_ev_flag is
+	// never published, the copy() below fails forever, and EVERY position-requiring mode
+	// (POSCTL, AUTO_LOITER, AUTO_TAKEOFF, AUTO_LAND and FORMIC_VELO_VIS) becomes permanently
+	// unavailable while armed - commander just answers "Switching to <mode> is currently not
+	// available" for the whole flight. Keep the gate for the no-GNSS case it was written for.
+	if (!_health_and_arming_checks.failsafeFlags().global_position_invalid) {
+		return true;
+	}
+
 	formic_ev_flag_s formic_ev_flag{};
 
 	if (!_formic_ev_flag_sub.copy(&formic_ev_flag)) {

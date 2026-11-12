@@ -836,4 +836,67 @@ msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_
 	return vio_status;
 }
 
+int construct_rendor_FORMIC_TARGET_BOX(const formic_target_box_s &box, const FormicTargetBoxMap &map,
+				       msp_rendor_formic_target_box_t corners[4])
+{
+	if (box.frame_width == 0 || box.frame_height == 0
+	    || !PX4_ISFINITE(box.box_x) || !PX4_ISFINITE(box.box_y)
+	    || !PX4_ISFINITE(box.box_width) || !PX4_ISFINITE(box.box_height)
+	    || box.box_width < 0.f || box.box_height < 0.f) {
+		return 0;
+	}
+
+	// The cells the image covers: the map's two edges in either order (a mirrored or flipped
+	// video swaps them), kept inside what a displayport position byte can hold.
+	const int col_min = math::max((int)floorf(math::min(map.left, map.right)), 0);
+	const int col_max = math::min((int)ceilf(math::max(map.left, map.right)) - 1, 255);
+	const int row_min = math::max((int)floorf(math::min(map.top, map.bottom)), 0);
+	const int row_max = math::min((int)ceilf(math::max(map.top, map.bottom)) - 1, 255);
+
+	if (col_max - col_min < 2 || row_max < row_min) {
+		return 0;
+	}
+
+	// Image pixel -> OSD cell, one linear map per axis.
+	const float col_a = map.left + (box.box_x / box.frame_width) * (map.right - map.left);
+	const float col_b = map.left + ((box.box_x + box.box_width) / box.frame_width) * (map.right - map.left);
+	const float row_a = map.top + (box.box_y / box.frame_height) * (map.bottom - map.top);
+	const float row_b = map.top + ((box.box_y + box.box_height) / box.frame_height) * (map.bottom - map.top);
+
+	int left = math::constrain((int)floorf(math::min(col_a, col_b)), col_min, col_max);
+	int right = math::constrain((int)floorf(math::max(col_a, col_b)), col_min, col_max);
+	const int top = math::constrain((int)floorf(math::min(row_a, row_b)), row_min, row_max);
+	const int bottom = math::constrain((int)floorf(math::max(row_a, row_b)), row_min, row_max);
+
+	// A far target is smaller than a cell: keep one free cell between the brackets so they
+	// frame the target instead of covering it.
+	if (right - left < 2) {
+		const int centre = math::constrain((int)floorf(0.5f * (col_a + col_b)), col_min + 1, col_max - 1);
+		left = centre - 1;
+		right = centre + 1;
+	}
+
+	const auto corner = [](int row, int col, char c) {
+		msp_rendor_formic_target_box_t m{};
+		m.subCommand = MSP_DP_WRITE_STRING;
+		m.screenYPosition = (uint8_t)row;
+		m.screenXPosition = (uint8_t)col;
+		m.iconAttrs = 0x00;
+		m.str[0] = c;
+		m.str[1] = '\0';
+		return m;
+	};
+
+	int count = 0;
+	corners[count++] = corner(top, left, '[');
+	corners[count++] = corner(top, right, ']');
+
+	if (bottom != top) {
+		corners[count++] = corner(bottom, left, '[');
+		corners[count++] = corner(bottom, right, ']');
+	}
+
+	return count;
+}
+
 } // namespace msp_osd

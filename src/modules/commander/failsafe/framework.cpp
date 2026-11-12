@@ -228,7 +228,7 @@ void FailsafeBase::notifyUser(uint8_t user_intended_mode, Action action, Action 
 				{events::Log::Warning, events::LogInternal::Warning},
 				"Failsafe warning:", mavlink_mode);
 
-			} else if (action == Action::Descend || action == Action::FallbackFormicAltHold || action == Action::FallbackAltCtrl
+			} else if (action == Action::Descend || action == Action::FallbackAltCtrl
 				   || action == Action::FallbackStab) {
 				/* EVENT
 				* @description Failsafe actions that disengage the autopilot (remove position control)
@@ -547,15 +547,6 @@ void FailsafeBase::getSelectedAction(const State &state, const failsafe_flags_s 
 		returned_state.cause = Cause::Generic;
 
 	// fallthrough
-	case Action::FallbackFormicAltHold:
-		if (modeCanRun(status_flags, vehicle_status_s::NAVIGATION_STATE_FORMIC_ALT_HOLD)) {
-			selected_action = Action::FallbackFormicAltHold;
-			break;
-		}
-
-		returned_state.cause = Cause::Generic;
-
-	// fallthrough
 	case Action::FallbackAltCtrl:
 		if (modeCanRun(status_flags, vehicle_status_s::NAVIGATION_STATE_ALTCTL)) {
 			selected_action = Action::FallbackAltCtrl;
@@ -682,8 +673,6 @@ uint8_t FailsafeBase::modeFromAction(const Action &action, uint8_t user_intended
 	switch (action) {
 
 	case Action::FallbackPosCtrl: return vehicle_status_s::NAVIGATION_STATE_POSCTL;
-
-	case Action::FallbackFormicAltHold: return vehicle_status_s::NAVIGATION_STATE_FORMIC_ALT_HOLD;
 
 	case Action::FallbackAltCtrl: return vehicle_status_s::NAVIGATION_STATE_ALTCTL;
 

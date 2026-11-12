@@ -1,6 +1,6 @@
 # Encodes the system state of the vehicle published by commander
 
-uint32 MESSAGE_VERSION = 1
+uint32 MESSAGE_VERSION = 2
 
 uint64 timestamp # time since system start (microseconds)
 
@@ -38,9 +38,9 @@ uint8 NAVIGATION_STATE_AUTO_RTL = 5             # Auto return to launch mode
 uint8 NAVIGATION_STATE_POSITION_SLOW = 6
 uint8 NAVIGATION_STATE_TURTLE = 7
 uint8 NAVIGATION_STATE_ALTITUDE_CRUISE = 8      # Altitude with Cruise mode
-uint8 NAVIGATION_STATE_FREE3 = 9
+uint8 NAVIGATION_STATE_FORMIC_VELO_VIS = 9      # Formic velocity-vision mode (closed-loop velocity, all 3 axes)
 uint8 NAVIGATION_STATE_ACRO = 10                # Acro mode
-uint8 NAVIGATION_STATE_FORMIC_TRACKER = 11
+uint8 NAVIGATION_STATE_FORMIC_VIS_SERVO = 11
 uint8 NAVIGATION_STATE_DESCEND = 12             # Descend mode (no position control)
 uint8 NAVIGATION_STATE_TERMINATION = 13         # Termination mode
 uint8 NAVIGATION_STATE_OFFBOARD = 14

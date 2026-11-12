@@ -31,26 +31,33 @@
  *
  ****************************************************************************/
 
-#include "formicTrackerCheck.hpp"
+#include "formicVeloVisCheck.hpp"
 
 #include <lib/mathlib/mathlib.h>
 
 using namespace time_literals;
 
-void FormicTrackerChecks::checkAndReport(const Context &context, Report &reporter)
+void FormicVeloVisChecks::checkAndReport(const Context &context, Report &reporter)
 {
 	const hrt_abstime now = hrt_absolute_time();
-	const hrt_abstime loss_timeout = static_cast<hrt_abstime>(_param_formic_trk_loss_t.get() * 1_s);
+	const hrt_abstime loss_timeout = static_cast<hrt_abstime>(_param_formic_velo_vis_loss_t.get() * 1_s);
 
 	bool data_is_recent = false;
-	formic_tracker_setpoint_s formic_tracker_setpoint;
+	formic_velo_vis_setpoint_s formic_velo_vis_setpoint;
 
-	if (_formic_tracker_setpoint_sub.copy(&formic_tracker_setpoint)) {
-		data_is_recent = now < formic_tracker_setpoint.timestamp + loss_timeout;
+	if (_formic_velo_vis_setpoint_sub.copy(&formic_velo_vis_setpoint)) {
+		data_is_recent = now < formic_velo_vis_setpoint.timestamp + loss_timeout;
+	}
+
+	// mc_pos_control's velocity controller needs a valid local velocity
+	// estimate to close the loop (same requirement OffboardChecks applies
+	// to offboard_control_mode.velocity).
+	if (reporter.failsafeFlags().local_velocity_invalid) {
+		data_is_recent = false;
 	}
 
 	// Output watchdog (see the class comment)
-	const bool active = context.status().nav_state == vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER;
+	const bool active = context.status().nav_state == vehicle_status_s::NAVIGATION_STATE_FORMIC_VELO_VIS;
 
 	if (active && !_was_active) {
 		_last_output = now;
@@ -59,27 +66,27 @@ void FormicTrackerChecks::checkAndReport(const Context &context, Report &reporte
 	_was_active = active;
 
 	if (active && !_output_stalled) {
-		vehicle_attitude_setpoint_s attitude_setpoint{};
-		_vehicle_attitude_setpoint_sub.copy(&attitude_setpoint);
+		trajectory_setpoint_s trajectory_setpoint{};
+		_trajectory_setpoint_sub.copy(&trajectory_setpoint);
 
 		// Newest setpoint seen since entering the mode (the clock starts at
 		// entry, so the previous mode's setpoints don't count). A copy can
 		// also come back zeroed once the publisher is gone - that, like any
 		// older timestamp, just doesn't move it.
-		_last_output = math::max(attitude_setpoint.timestamp, _last_output);
+		_last_output = math::max(trajectory_setpoint.timestamp, _last_output);
 
 		if (now > _last_output + loss_timeout) {
 			_output_stalled = true;
-			PX4_ERR("formic_tracker published no attitude setpoint for %.2f s, falling back to FormicAltHold",
+			PX4_ERR("formic_velo_vis published no trajectory setpoint for %.2f s, falling back to ALTCTL",
 				(double)((now - _last_output) * 1e-6f));
 		}
 	}
 
 	if (_output_stalled && (!context.isArmed()
-				|| context.status().nav_state_user_intention != vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER)) {
+				|| context.status().nav_state_user_intention != vehicle_status_s::NAVIGATION_STATE_FORMIC_VELO_VIS)) {
 		_output_stalled = false;
 	}
 
 	// This is a mode requirement, no need to report
-	reporter.failsafeFlags().formic_tracker_signal_lost = !data_is_recent || _output_stalled;
+	reporter.failsafeFlags().formic_velo_vis_signal_lost = !data_is_recent || _output_stalled;
 }

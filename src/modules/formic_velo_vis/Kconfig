@@ -1,0 +1,3 @@
+menuconfig MODULES_FORMIC_VELO_VIS
+	bool "formic velo vis"
+	default n

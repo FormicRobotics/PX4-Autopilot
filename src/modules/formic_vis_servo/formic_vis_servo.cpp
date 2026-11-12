@@ -1,4 +1,4 @@
-#include "formic_tracker.hpp"
+#include "formic_vis_servo.hpp"
 
 #include <px4_platform_common/getopt.h>
 #include <px4_platform_common/log.h>
@@ -12,23 +12,29 @@ namespace
 {
 // kThrustFloor mirrors offboard_control.py's own constant. kVzIntegralLimit
 // was widened from that file's 0.3 to 0.5: live SITL testing (regress9,
-// see formic_tracker.hpp's header comment) showed the vz loop needed more
+// see formic_vis_servo.hpp's header comment) showed the vz loop needed more
 // integral authority than that file ever required, because this fallback
 // hover_thrust (FMTRK_HOVER_FB) is only an estimate - 0.3 left no room to
 // also cancel a baseline error on top of actually tracking the commanded
 // climb rate.
 constexpr float kVzIntegralLimit = 0.5f;  // clamp on the thrust integral term (normalized thrust)
 constexpr float kThrustFloor = -0.02f;    // thrust_z never let past this toward zero/positive
+// Anti-windup on the integrated yaw setpoint: it may lead the measured yaw
+// by at most this much. Without it, psi_dot_cmd integrated while the vehicle
+// could not turn (still on the ground after entry) piled up ~0.9 rad, and
+// the attitude loop snapped to it at liftoff at ~1.7 rad/s and lost the
+// target (SITL log 2026-10-26 06_27_13).
+constexpr float kYawSpMaxLead = 0.3f;     // rad
 }
 
-FormicTracker::FormicTracker() :
+FormicVisServo::FormicVisServo() :
 	ModuleParams(nullptr),
 	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::nav_and_controllers)
 {
 	parameters_update(true);
 }
 
-FormicTracker::~FormicTracker()
+FormicVisServo::~FormicVisServo()
 {
 	perf_free(_cycle_perf);
 	perf_free(_active_perf);
@@ -37,14 +43,14 @@ FormicTracker::~FormicTracker()
 	perf_free(_published_perf);
 }
 
-bool FormicTracker::init()
+bool FormicVisServo::init()
 {
 	ScheduleOnInterval(10_ms);
 	parameters_update();
 	return true;
 }
 
-void FormicTracker::parameters_update(bool force)
+void FormicVisServo::parameters_update(bool force)
 {
 	if (force || _parameter_update_sub.updated()) {
 		parameter_update_s param_update{};
@@ -53,7 +59,7 @@ void FormicTracker::parameters_update(bool force)
 	}
 }
 
-void FormicTracker::reset_on_entry(float current_yaw)
+void FormicVisServo::reset_on_entry(float current_yaw)
 {
 	_yaw_setpoint = current_yaw;
 	_vz_integral = 0.f;
@@ -61,16 +67,16 @@ void FormicTracker::reset_on_entry(float current_yaw)
 	_vz_pid_initialized = false;
 }
 
-const char *FormicTracker::tick_result_str(TickResult result)
+const char *FormicVisServo::tick_result_str(TickResult result)
 {
 	switch (result) {
 	case TickResult::Inactive: return "inactive";
 
 	case TickResult::EntryTick: return "entry tick";
 
-	case TickResult::NoSetpoint: return "no formic_tracker_setpoint";
+	case TickResult::NoSetpoint: return "no formic_vis_servo_setpoint";
 
-	case TickResult::ZeroTimestamp: return "formic_tracker_setpoint timestamp 0";
+	case TickResult::ZeroTimestamp: return "formic_vis_servo_setpoint timestamp 0";
 
 	case TickResult::Published: return "publishing";
 	}
@@ -78,7 +84,7 @@ const char *FormicTracker::tick_result_str(TickResult result)
 	return "?";
 }
 
-void FormicTracker::set_tick_result(TickResult result, const formic_tracker_setpoint_s *setpoint)
+void FormicVisServo::set_tick_result(TickResult result, const formic_vis_servo_setpoint_s *setpoint)
 {
 	if (result == _tick_result) {
 		return;
@@ -100,7 +106,7 @@ void FormicTracker::set_tick_result(TickResult result, const formic_tracker_setp
 	_tick_result = result;
 }
 
-void FormicTracker::Run()
+void FormicVisServo::Run()
 {
 	if (should_exit()) {
 		ScheduleClear();
@@ -113,13 +119,30 @@ void FormicTracker::Run()
 	perf_end(_cycle_perf);
 }
 
-void FormicTracker::run_once()
+void FormicVisServo::publish_status()
+{
+	const hrt_abstime now = hrt_absolute_time();
+
+	if (now - _last_status_pub < 1_s) {
+		return;
+	}
+
+	_last_status_pub = now;
+	formic_vis_servo_status_s status{};
+	status.timestamp = now;
+	status.tilt_max = _param_formic_trk_tilt_max.get();
+	status.vz_max = _param_formic_trk_vz_max.get();
+	_formic_vis_servo_status_pub.publish(status);
+}
+
+void FormicVisServo::run_once()
 {
 	parameters_update();
+	publish_status();
 
 	vehicle_status_s vehicle_status{};
 	_vehicle_status_sub.copy(&vehicle_status);
-	const bool active = (vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_FORMIC_TRACKER);
+	const bool active = (vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_FORMIC_VIS_SERVO);
 
 	if (!active) {
 		_was_active = false;
@@ -150,13 +173,13 @@ void FormicTracker::run_once()
 	const float dt = math::constrain((now - _last_run) * 1e-6f, 0.0002f, 0.1f);
 	_last_run = now;
 
-	formic_tracker_setpoint_s setpoint{};
+	formic_vis_servo_setpoint_s setpoint{};
 
 	// Nothing received yet - commander's own entry/runtime gate
-	// (formicTrackerCheck) is what keeps the vehicle out of this nav_state
+	// (formicVisServoCheck) is what keeps the vehicle out of this nav_state
 	// without a live stream; this is just defense in depth against a race
 	// right at mode entry. Publish nothing this tick.
-	if (!_formic_tracker_setpoint_sub.copy(&setpoint)) {
+	if (!_formic_vis_servo_setpoint_sub.copy(&setpoint)) {
 		perf_count(_no_setpoint_perf);
 		set_tick_result(TickResult::NoSetpoint);
 		return;
@@ -180,12 +203,15 @@ void FormicTracker::run_once()
 		_hover_thrust = _param_formic_trk_hover_fb.get();
 	}
 
-	publish_attitude_setpoint(setpoint, dt, vehicle_local_position.vz);
+	const matrix::Quatf q(vehicle_attitude.q);
+	const float current_yaw = q.isAllFinite() ? matrix::Eulerf(q).psi() : _yaw_setpoint;
+	publish_attitude_setpoint(setpoint, dt, vehicle_local_position.vz, current_yaw);
 	perf_count(_published_perf);
 	set_tick_result(TickResult::Published, &setpoint);
 }
 
-void FormicTracker::publish_attitude_setpoint(const formic_tracker_setpoint_s &setpoint, float dt, float vz_actual)
+void FormicVisServo::publish_attitude_setpoint(const formic_vis_servo_setpoint_s &setpoint, float dt, float vz_actual,
+		float current_yaw)
 {
 	const float tilt_max = _param_formic_trk_tilt_max.get();
 	const float vz_max = _param_formic_trk_vz_max.get();
@@ -194,6 +220,8 @@ void FormicTracker::publish_attitude_setpoint(const formic_tracker_setpoint_s &s
 	// publish_attitude_setpoint() (roll/pitch commanded open-loop, yaw
 	// integrated from the commanded yaw rate).
 	_yaw_setpoint += setpoint.psi_dot_cmd * dt;
+	const float yaw_lead = math::constrain(matrix::wrap_pi(_yaw_setpoint - current_yaw), -kYawSpMaxLead, kYawSpMaxLead);
+	_yaw_setpoint = matrix::wrap_pi(current_yaw + yaw_lead);
 
 	const float roll = math::constrain(setpoint.phi_cmd, -tilt_max, tilt_max);
 	const float pitch = math::constrain(setpoint.theta_cmd, -tilt_max, tilt_max);
@@ -251,9 +279,9 @@ void FormicTracker::publish_attitude_setpoint(const formic_tracker_setpoint_s &s
 	_vehicle_attitude_setpoint_pub.publish(attitude_setpoint);
 }
 
-int FormicTracker::task_spawn(int argc, char *argv[])
+int FormicVisServo::task_spawn(int argc, char *argv[])
 {
-	FormicTracker *instance = new FormicTracker();
+	FormicVisServo *instance = new FormicVisServo();
 
 	if (!instance) {
 		PX4_ERR("alloc failed");
@@ -273,19 +301,19 @@ int FormicTracker::task_spawn(int argc, char *argv[])
 	return PX4_ERROR;
 }
 
-FormicTracker *FormicTracker::instantiate(int argc, char *argv[])
+FormicVisServo *FormicVisServo::instantiate(int argc, char *argv[])
 {
-	return new FormicTracker();
+	return new FormicVisServo();
 }
 
-int FormicTracker::custom_command(int argc, char *argv[])
+int FormicVisServo::custom_command(int argc, char *argv[])
 {
 	return print_usage("unknown command");
 }
 
-int FormicTracker::print_status()
+int FormicVisServo::print_status()
 {
-	PX4_INFO("last tick: %s, setpoint sub valid: %d", tick_result_str(_tick_result), _formic_tracker_setpoint_sub.valid());
+	PX4_INFO("last tick: %s, setpoint sub valid: %d", tick_result_str(_tick_result), _formic_vis_servo_setpoint_sub.valid());
 	perf_print_counter(_cycle_perf);
 	perf_print_counter(_active_perf);
 	perf_print_counter(_no_setpoint_perf);
@@ -294,7 +322,7 @@ int FormicTracker::print_status()
 	return 0;
 }
 
-int FormicTracker::print_usage(const char *reason)
+int FormicVisServo::print_usage(const char *reason)
 {
 	if (reason) {
 		PX4_WARN("%s", reason);
@@ -303,18 +331,18 @@ int FormicTracker::print_usage(const char *reason)
 	PRINT_MODULE_DESCRIPTION(
 		R"DESCR_STR(
 ### Description
-Attitude+climb-rate setpoint generator for NAVIGATION_STATE_FORMIC_TRACKER.
-Drives vehicle_attitude_setpoint directly from formic_tracker_setpoint
+Attitude+climb-rate setpoint generator for NAVIGATION_STATE_FORMIC_VIS_SERVO.
+Drives vehicle_attitude_setpoint directly from formic_vis_servo_setpoint
 (roll/pitch/climb-rate/yaw-rate) while that nav_state is active; idle and
-publishes nothing otherwise. See formic_tracker.hpp for the full design note.
+publishes nothing otherwise. See formic_vis_servo.hpp for the full design note.
 )DESCR_STR");
 
-	PRINT_MODULE_USAGE_NAME("formic_tracker", "module");
+	PRINT_MODULE_USAGE_NAME("formic_vis_servo", "module");
 	PRINT_MODULE_USAGE_COMMAND("start");
 	return PX4_OK;
 }
 
-extern "C" __EXPORT int formic_tracker_main(int argc, char *argv[])
+extern "C" __EXPORT int formic_vis_servo_main(int argc, char *argv[])
 {
-	return FormicTracker::main(argc, argv);
+	return FormicVisServo::main(argc, argv);
 }

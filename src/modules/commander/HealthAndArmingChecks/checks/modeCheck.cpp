@@ -152,17 +152,30 @@ void ModeChecks::checkAndReport(const Context &context, Report &reporter)
 		reporter.clearCanRunBits((NavModes)reporter.failsafeFlags().mode_req_offboard_signal);
 	}
 
-	if (reporter.failsafeFlags().formic_tracker_signal_lost
-	    && reporter.failsafeFlags().mode_req_formic_tracker_signal != 0) {
+	if (reporter.failsafeFlags().formic_vis_servo_signal_lost
+	    && reporter.failsafeFlags().mode_req_formic_vis_servo_signal != 0) {
 		/* EVENT
 		 * @description
-		 * No recent formic_tracker_setpoint has been received.
+		 * No recent formic_vis_servo_setpoint has been received.
 		 */
-		reporter.armingCheckFailure((NavModes)reporter.failsafeFlags().mode_req_formic_tracker_signal,
+		reporter.armingCheckFailure((NavModes)reporter.failsafeFlags().mode_req_formic_vis_servo_signal,
 					    health_component_t::system,
-					    events::ID("check_modes_formic_tracker_signal"),
-					    events::Log::Error, "No formic_tracker signal");
-		reporter.clearCanRunBits((NavModes)reporter.failsafeFlags().mode_req_formic_tracker_signal);
+					    events::ID("check_modes_formic_vis_servo_signal"),
+					    events::Log::Error, "No formic_vis_servo signal");
+		reporter.clearCanRunBits((NavModes)reporter.failsafeFlags().mode_req_formic_vis_servo_signal);
+	}
+
+	if (reporter.failsafeFlags().formic_velo_vis_signal_lost
+	    && reporter.failsafeFlags().mode_req_formic_velo_vis_signal != 0) {
+		/* EVENT
+		 * @description
+		 * No recent formic_velo_vis_setpoint has been received.
+		 */
+		reporter.armingCheckFailure((NavModes)reporter.failsafeFlags().mode_req_formic_velo_vis_signal,
+					    health_component_t::system,
+					    events::ID("check_modes_formic_velo_vis_signal"),
+					    events::Log::Error, "No formic_velo_vis signal");
+		reporter.clearCanRunBits((NavModes)reporter.failsafeFlags().mode_req_formic_velo_vis_signal);
 	}
 
 	if (reporter.failsafeFlags().home_position_invalid && reporter.failsafeFlags().mode_req_home_position != 0) {
