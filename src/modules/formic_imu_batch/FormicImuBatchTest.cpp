@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdlib>
 #include <vector>
 
 #include "BatchGate.hpp"
@@ -279,9 +280,10 @@ constexpr float kIcmScale = 0.00013f;
 constexpr uint64_t kIcmIntervalUs = 125;  // 8 kHz
 
 // FIFO message `m` of an 8 kHz ICM42688P read every 1 ms: input samples n = 8m ... 8m + 7 at
-// kStartUs + n * 125 us, the newest at timestamp_sample; sample n has x = n, y = -n, z = `z`.
+// kStartUs + n * 125 us, the newest at timestamp_sample (stamped `jitter_us` off); sample n has x = n
+// (or `x_value`), y = -x, z = `z`.
 void addIcmMessage(SampleBatcher &batcher, Sink &sink, int m, float reported_dt_us, float scale = kIcmScale,
-		   int16_t x_value = INT16_MIN, int16_t z = 1000)
+		   int16_t x_value = INT16_MIN, int16_t z = 1000, int jitter_us = 0)
 {
 	int16_t x[32] {}, y[32] {}, zs[32] {};
 
@@ -292,8 +294,8 @@ void addIcmMessage(SampleBatcher &batcher, Sink &sink, int m, float reported_dt_
 		zs[i] = z;
 	}
 
-	batcher.add(kStartUs + static_cast<uint64_t>(8 * m + 7) * kIcmIntervalUs, reported_dt_us, kIcmDevice, scale, 8, x, y,
-		    zs, sink);
+	batcher.add(kStartUs + static_cast<uint64_t>(8 * m + 7) * kIcmIntervalUs + jitter_us, reported_dt_us, kIcmDevice, scale,
+		    8, x, y, zs, sink);
 }
 
 // Every batch sample is the mean of consecutive input samples when its value and its time both point
@@ -375,7 +377,7 @@ TEST(FormicImuBatch, AGroupNeverSpansAGap)
 
 // The ICM42688P accel switches between 16 bit data (1/8192 g) and 20 bit data scaled to 16 bit
 // (1/2048 g) from one FIFO message to the next. A group across the switch is averaged at the coarser
-// scale; each batch keeps one scale.
+// scale, and the batches hold the coarser scale after it: the finer samples are converted.
 TEST(FormicImuBatch, ScaleChangeInAGroupAveragesAtTheCoarserScale)
 {
 	SampleBatcher batcher;
@@ -390,25 +392,78 @@ TEST(FormicImuBatch, ScaleChangeInAGroupAveragesAtTheCoarserScale)
 	addIcmMessage(batcher, sink, 3, 125.f, kFine, 400, 8000);	// inputs 24-31
 	batcher.flush(sink);
 
-	// means of 0-4 | 5-9, 10-14, 15-19 | 20-24, 25-29
-	ASSERT_EQ(sink.batches.size(), 3u);
+	// means of 0-4 | 5-9, 10-14, 15-19, 20-24, 25-29 (the last two finer, held at the coarser scale)
+	ASSERT_EQ(sink.batches.size(), 2u);
 	EXPECT_EQ(sink.batches[0].samples, 1);
 	EXPECT_EQ(sink.batches[0].scale, kFine);
 	EXPECT_EQ(sink.batches[0].x[0], 400);
 
 	const formic_imu_batch_s &coarse = sink.batches[1];
-	EXPECT_EQ(coarse.samples, 3);
+	EXPECT_EQ(coarse.samples, 5);
 	EXPECT_EQ(coarse.scale, kCoarse);
 
-	for (int k = 0; k < 3; k++) {
+	for (int k = 0; k < 5; k++) {
 		EXPECT_EQ(coarse.x[k], 100);
 		EXPECT_EQ(coarse.y[k], -100);
 		EXPECT_EQ(coarse.z[k], 2000);
 	}
 
-	EXPECT_EQ(sink.batches[2].samples, 2);
-	EXPECT_EQ(sink.batches[2].scale, kFine);
-	EXPECT_EQ(sink.batches[2].x[1], 400);
+	EXPECT_EQ(batcher.lost(), 0u);
+}
+
+// A sensor switching scale on every other FIFO message (in flight near the edge of the fine range)
+// splits the batches once into the coarser scale, and once back a second after its last coarse sample,
+// not on every switch.
+TEST(FormicImuBatch, CoarseScaleIsHeldForASecond)
+{
+	SampleBatcher batcher;
+	Sink sink;
+	constexpr float kFine = 9.80665f / 8192.f;
+	constexpr float kCoarse = 9.80665f / 2048.f;
+
+	// 50 ms switching, the last coarse message is m = 49 (inputs 392-399), then fine only for 1.2 s
+	for (int m = 0; m < 50; m++) {
+		if (m % 2 == 0) {
+			addIcmMessage(batcher, sink, m, 125.f, kFine, 400, 8000);
+
+		} else {
+			addIcmMessage(batcher, sink, m, 125.f, kCoarse, 100, 2000);
+		}
+	}
+
+	for (int m = 50; m < 1250; m++) {
+		addIcmMessage(batcher, sink, m, 125.f, kFine, 400, 8000);
+	}
+
+	batcher.flush(sink);
+
+	int scale_changes = 0;
+	const formic_imu_batch_s *first_fine_again = nullptr;
+
+	for (size_t b = 0; b < sink.batches.size(); b++) {
+		const formic_imu_batch_s &batch = sink.batches[b];
+		const bool coarse = (batch.scale > 2.f * kFine);
+
+		for (int k = 0; k < batch.samples; k++) {
+			EXPECT_EQ(batch.x[k], coarse ? 100 : 400) << "batch " << b << " sample " << k;
+		}
+
+		if ((b > 0) && (batch.scale > 2.f * kFine) != (sink.batches[b - 1].scale > 2.f * kFine)) {
+			scale_changes++;
+
+			if (!coarse) {
+				first_fine_again = &batch;
+			}
+		}
+	}
+
+	EXPECT_EQ(scale_changes, 2);
+	ASSERT_NE(first_fine_again, nullptr);
+
+	// the last coarse batch sample is the mean of inputs 395-399, at input 397
+	const uint64_t last_coarse_us = kStartUs + 397 * kIcmIntervalUs;
+	EXPECT_GT(first_fine_again->timestamp_sample, last_coarse_us + SampleBatcher::SCALE_HOLD_US);
+	EXPECT_LT(first_fine_again->timestamp_sample, last_coarse_us + SampleBatcher::SCALE_HOLD_US + 1000);
 	EXPECT_EQ(batcher.lost(), 0u);
 }
 
@@ -470,6 +525,79 @@ TEST(FormicImuBatch, TheIntervalIsMeasured)
 	add4(25);	// message 24 lost
 	EXPECT_NEAR(batcher.inputRateHz(), 1600.f, 0.01f);
 	EXPECT_EQ(batcher.lost(), 4u);
+}
+
+// The ICM42688P's timestamps jitter by about 100 us, nearly a sample at 8 kHz. The sample clock counts
+// the samples on and only steers by the timestamps: every sample is kept, none counted lost, and the
+// batch samples come evenly, 625 us apart, near their true times.
+TEST(FormicImuBatch, TimestampJitterIsSmoothedOut)
+{
+	SampleBatcher batcher;
+	Sink sink;
+	uint32_t seed = 12345;
+
+	for (int m = 0; m < 2000; m++) {
+		seed = seed * 1103515245u + 12345u;
+		const int jitter = static_cast<int>((seed >> 16) % 201u) - 100;	// -100 ... +100 us
+		addIcmMessage(batcher, sink, m, 119.47f, kIcmScale, INT16_MIN, 1000, jitter);
+	}
+
+	EXPECT_EQ(batcher.lost(), 0u);
+	EXPECT_EQ(batcher.dropped(), 0u);
+	EXPECT_EQ(batcher.emitted() + batcher.pending(), 16000u / 5u);	// every input sample averaged
+
+	// after the first 0.1 s (160 batch samples) the clock has settled
+	uint64_t previous = 0;
+	int checked = 0;
+	int64_t worst_offset = 0;
+	int64_t worst_step = 0;
+
+	for (const formic_imu_batch_s &b : sink.batches) {
+		for (int k = 0; k < b.samples; k++) {
+			const uint64_t t = b.timestamp_sample + b.dt[k];
+			const int index = (b.x[k] - 2) / 5;		// batch sample number: the mean of inputs 5n ... 5n + 4
+
+			if (index >= 160) {
+				const int64_t offset = static_cast<int64_t>(t) - static_cast<int64_t>(kStartUs + static_cast<uint64_t>(b.x[k]) *
+						       kIcmIntervalUs);
+				const int64_t step = static_cast<int64_t>(t - previous) - 625;
+				worst_offset = (llabs(offset) > llabs(worst_offset)) ? offset : worst_offset;
+				worst_step = (llabs(step) > llabs(worst_step)) ? step : worst_step;
+				checked++;
+			}
+
+			previous = t;
+		}
+	}
+
+	EXPECT_GT(checked, 3000);
+	EXPECT_LE(llabs(worst_offset), 60) << "batch sample time off its true time (us)";
+	EXPECT_LE(llabs(worst_step), 15) << "batch sample step off 625 us (us)";
+	EXPECT_NEAR(batcher.inputRateHz(), 8000.f, 8.f);
+}
+
+// One message stamped late, or early, by less than the gap tolerance follows its previous samples: no
+// gap, nothing dropped, the samples stay consecutive.
+TEST(FormicImuBatch, AStampOffWithinTheToleranceIsNoGap)
+{
+	SampleBatcher batcher;
+	Sink sink;
+
+	for (int m = 0; m < 200; m++) {
+		const int jitter = (m == 100) ? 350 : ((m == 150) ? -350 : 0);
+		addIcmMessage(batcher, sink, m, 125.f, kIcmScale, INT16_MIN, 1000, jitter);
+	}
+
+	EXPECT_EQ(batcher.lost(), 0u);
+	EXPECT_EQ(batcher.dropped(), 0u);
+	EXPECT_EQ(batcher.emitted() + batcher.pending(), 1600u / 5u);
+
+	for (const formic_imu_batch_s &b : sink.batches) {
+		for (int k = 1; k < b.samples; k++) {
+			EXPECT_EQ(b.x[k], b.x[k - 1] + 5);
+			EXPECT_NEAR(static_cast<double>(b.dt[k] - b.dt[k - 1]), 625., 25.);
+		}
+	}
 }
 
 // Off until the default is set; then the default's state, set by the parameter.

@@ -2,21 +2,28 @@
  * Packs the samples of a sensor's FIFO messages (sensor_gyro_fifo, sensor_accel_fifo) into batches
  * of up to formic_imu_batch_s::MAX_SAMPLES samples, each with its own sample time.
  *
- * A FIFO message holds N samples one sample interval apart, the newest at timestamp_sample:
- *
- *     t_i = timestamp_sample - (N - 1 - i) * interval
- *
- * The interval is measured: the time between the newest samples of two consecutive messages over the
- * samples of the later one, smoothed. The driver's dt is only the first guess and the bound for a
- * measurement (from 0.8 to 1.25 dt; a lost message gives a longer time and is not taken): an
- * ICM42688P reports 119.5 us from its FIFO clock while its samples come every 124.4 us.
+ * Sample times come from a sample clock. A FIFO message holds N consecutive samples, the newest at
+ * about timestamp_sample, and consecutive messages hold consecutive samples: the clock counts the
+ * samples on from the previous one, one sample interval each. The timestamps only steer it, through an
+ * alpha-beta filter on the time of each message's newest sample (phase and sample interval): they
+ * jitter by about 100 us (the ICM42688P's data-ready interrupt), more than half a sample at 8 kHz. The
+ * filter starts from the driver's dt as a least-squares line through the first messages and settles to
+ * fixed gains; the interval stays within 15 % of the driver's dt. A message later than the clock's prediction by more than the gap tolerance
+ * (GAP_TOLERANCE_US, at least 3/4 of a sample) follows samples that never came: the clock jumps to it.
+ * A message earlier than the prediction still follows the previous sample: the clock catches up. A
+ * message not after the previous message is dropped.
  *
  * A sensor faster than TARGET_RATE_HZ is averaged down: each batch sample is the mean of `factor`
  * consecutive samples, stamped at their mean time, with factor = round(rate / TARGET_RATE_HZ) from
  * the driver's dt. An 8 kHz ICM42688P is averaged by 5, a 1.6 kHz BMI270 passes as it is. A group of
  * samples to average never spans a gap or a change of device: its samples are dropped. A change of
- * scale within a group (the ICM42688P accel switches between 16 and 20 bit data) is averaged at the
- * coarser scale.
+ * scale within a group (the ICM42688P switches to its coarse scale beyond 16 bit data) is averaged at
+ * the coarser scale.
+ *
+ * A batch has one scale. Once a batch sample comes at a coarser scale, the batches stay at it until
+ * SCALE_HOLD_US after the last such sample; finer samples meanwhile are converted to it. A sensor that
+ * switches scale on many FIFO messages (flight near the edge of its fine range) splits a batch about
+ * twice a second, not on every switch.
  *
  * A batch is emitted when it is full, and before a sample that cannot join it: another device or
  * scale, a time offset beyond uint16, or a time not after the previous sample's.
@@ -48,6 +55,13 @@ public:
 	/// Faster sensors are averaged down to about this rate (Hz): 32 samples a batch, 50 batches a second.
 	static constexpr float TARGET_RATE_HZ = 1600.f;
 
+	/// A message later than the sample clock's prediction by more than this (at least 3/4 of a sample)
+	/// follows missing samples (microseconds).
+	static constexpr float GAP_TOLERANCE_US = 400.f;
+
+	/// How long the batches stay at a coarser scale after its last sample (microseconds).
+	static constexpr uint64_t SCALE_HOLD_US = 1'000'000;
+
 	/// The number of consecutive samples averaged into one batch sample, for a sensor sampling every
 	/// `dt_us` microseconds: the factor that brings it nearest TARGET_RATE_HZ, at least 1.
 	static uint8_t averagingFactor(float dt_us)
@@ -74,27 +88,69 @@ public:
 		}
 
 		if ((device_id != _input_device_id) || (_factor == 0)) {
-			// another sensor: its own rate, interval and groups
+			// another sensor: its own rate, clock and groups
 			restartInput();
 			_input_device_id = device_id;
 			_factor = averagingFactor(dt_us);
 		}
 
-		const float interval = updateInterval(timestamp_sample, dt_us, samples);
+		if ((_fits > 0) && (timestamp_sample <= _last_message_us)) {
+			// a repeated or older message
+			_dropped += samples;
+			return;
+		}
+
+		_last_message_us = timestamp_sample;
+
+		// the time of the message's newest sample, and the time between its samples
+		uint64_t newest = timestamp_sample;
+		float step = 0.f;
+
+		if (_fits == 0) {
+			_interval_us = (dt_us > 0.f) ? dt_us : 1.f;
+			step = _interval_us;
+			_fits = 1;
+
+		} else {
+			const float span = static_cast<float>(samples) * _interval_us;
+			const float residual = static_cast<float>(static_cast<int64_t>(timestamp_sample - _clock_us)) - span;
+
+			if (residual > gapTolerance()) {
+				// samples missing: the clock jumps to the message; a group would not be consecutive samples
+				step = _interval_us;
+				_group_samples = 0;
+
+			} else {
+				// the samples follow the previous one; the timestamp steers the clock
+				_fits++;
+				const float k = static_cast<float>(_fits);
+				const float alpha = fmaxf(ALPHA, 2.f * (2.f * k - 1.f) / (k * (k + 1.f)));
+				const float beta = fmaxf(BETA, 6.f / (k * (k + 1.f)));
+
+				// never standing still or running back
+				const float advance = fmaxf(span + alpha * residual, 0.5f * span);
+				newest = _clock_us + static_cast<uint64_t>(lroundf(advance));
+				step = advance / samples;
+
+				_interval_us += beta * residual / samples;
+
+				if (dt_us > 0.f) {
+					// within 15 % of the driver's dt (the ICM42688P's is 4.6 % short): a jittered start
+					// cannot throw the clock far enough off to see a gap
+					_interval_us = fminf(fmaxf(_interval_us, 0.85f * dt_us), 1.15f * dt_us);
+				}
+			}
+		}
+
+		_clock_us = newest;
 
 		for (uint8_t i = 0; i < samples; i++) {
-			const uint64_t back = static_cast<uint64_t>(lroundf(static_cast<float>(samples - 1 - i) * interval));
-			const uint64_t t = (timestamp_sample > back) ? timestamp_sample - back : 0;
+			const uint64_t back = static_cast<uint64_t>(lroundf(static_cast<float>(samples - 1 - i) * step));
+			const uint64_t t = (newest > back) ? newest - back : 0;
 
 			if (t <= _last_input_us) {
-				// a repeated or older sample
 				_dropped++;
 				continue;
-			}
-
-			if ((_group_samples > 0) && (static_cast<float>(t - _last_input_us) > 1.5f * interval)) {
-				// samples missing: the group would not be consecutive samples
-				_group_samples = 0;
 			}
 
 			_last_input_us = t;
@@ -104,7 +160,7 @@ public:
 				const uint64_t t_mean = _group_t0 + static_cast<uint64_t>(lroundf(static_cast<float>(_group_dt_sum) /
 							_group_samples));
 				addSample(t_mean, groupMean(0), groupMean(1), groupMean(2), device_id, _group_scale,
-					  interval * static_cast<float>(_factor), emit);
+					  _interval_us * static_cast<float>(_factor), emit);
 				_group_samples = 0;
 			}
 		}
@@ -122,7 +178,7 @@ public:
 	/// Samples averaged into one batch sample for the present sensor; 0 before its first message.
 	uint8_t factor() const { return _factor; }
 
-	/// The measured sample rate of the present sensor (Hz); 0 before it is measured.
+	/// The sample rate of the present sensor by its sample clock (Hz); 0 before its first message.
 	float inputRateHz() const { return (_interval_us > 0.f) ? 1e6f / _interval_us : 0.f; }
 
 	/// Emits the batch now, if it holds any sample.
@@ -151,33 +207,21 @@ public:
 private:
 	static constexpr uint8_t MAX_FACTOR = 32;
 
-	/// Weight of a new interval measurement in the smoothed interval.
-	static constexpr float INTERVAL_GAIN = 0.01f;
+	// steady gains of the sample clock's alpha-beta filter: critically damped, beta = alpha^2 / (2 - alpha)
+	static constexpr float ALPHA = 0.05f;
+	static constexpr float BETA = ALPHA * ALPHA / (2.f - ALPHA);
+
+	float gapTolerance() const { return fmaxf(GAP_TOLERANCE_US, 0.75f * _interval_us); }
 
 	void restartInput()
 	{
+		_fits = 0;
 		_last_message_us = 0;
+		_clock_us = 0;
 		_interval_us = 0.f;
 		_last_input_us = 0;
 		_group_samples = 0;
-	}
-
-	/// Measures the sample interval with the message's timestamp and returns the interval to use.
-	float updateInterval(uint64_t timestamp_sample, float dt_us, uint8_t samples)
-	{
-		if ((_last_message_us != 0) && (timestamp_sample > _last_message_us) && (dt_us > 0.f)) {
-			const float measured = static_cast<float>(timestamp_sample - _last_message_us) / samples;
-
-			if ((measured > 0.8f * dt_us) && (measured < 1.25f * dt_us)) {
-				_interval_us = (_interval_us > 0.f) ? _interval_us + INTERVAL_GAIN * (measured - _interval_us) : measured;
-			}
-		}
-
-		if (timestamp_sample > _last_message_us) {
-			_last_message_us = timestamp_sample;
-		}
-
-		return (_interval_us > 0.f) ? _interval_us : dt_us;
+		_hold_set = false;
 	}
 
 	void addToGroup(uint64_t t, int16_t x, int16_t y, int16_t z, float scale)
@@ -192,7 +236,7 @@ private:
 			_group_scale = scale;
 			_group_sum[0] = _group_sum[1] = _group_sum[2] = 0;
 
-		} else if (fabsf(scale - _group_scale) > 1e-6f * fabsf(_group_scale)) {
+		} else if (!sameScale(scale, _group_scale)) {
 			if (fabsf(scale) > fabsf(_group_scale)) {
 				// a coarser scale: the group so far moves to it
 				for (int k = 0; k < 3; k++) {
@@ -215,10 +259,17 @@ private:
 		_group_samples++;
 	}
 
+	static bool sameScale(float a, float b) { return fabsf(a - b) <= 1e-6f * fabsf(b); }
+
+	static int16_t toInt16(float v)
+	{
+		const long r = lroundf(v);
+		return static_cast<int16_t>((r > INT16_MAX) ? INT16_MAX : ((r < INT16_MIN) ? INT16_MIN : r));
+	}
+
 	int16_t groupMean(int axis) const
 	{
-		const long mean = lroundf(static_cast<float>(_group_sum[axis]) / _group_samples);
-		return static_cast<int16_t>((mean > INT16_MAX) ? INT16_MAX : ((mean < INT16_MIN) ? INT16_MIN : mean));
+		return toInt16(static_cast<float>(_group_sum[axis]) / _group_samples);
 	}
 
 	/// Adds one batch sample at time `t`; `interval_us` is the time between batch samples.
@@ -239,8 +290,23 @@ private:
 			}
 		}
 
+		int16_t v[3] {x, y, z};
+
+		if (!_hold_set || (fabsf(scale) >= fabsf(_hold_scale) * (1.f - 1e-6f)) || (t > _hold_until_us)) {
+			// the first sample, a scale as coarse or coarser, or the hold ran out: this sample's scale
+			_hold_scale = scale;
+			_hold_until_us = t + SCALE_HOLD_US;
+			_hold_set = true;
+
+		} else {
+			// a finer scale while a coarser one holds: converted to it
+			for (int k = 0; k < 3; k++) {
+				v[k] = toInt16(static_cast<float>(v[k]) * (scale / _hold_scale));
+			}
+		}
+
 		if (_batch.samples > 0
-		    && (device_id != _batch.device_id || fabsf(scale - _batch.scale) > 1e-6f * fabsf(_batch.scale)
+		    && (device_id != _batch.device_id || !sameScale(_hold_scale, _batch.scale)
 			|| (t - _batch.timestamp_sample) > UINT16_MAX)) {
 			emitBatch(emit);
 		}
@@ -248,15 +314,15 @@ private:
 		if (_batch.samples == 0) {
 			_batch.timestamp_sample = t;
 			_batch.device_id = device_id;
-			_batch.scale = scale;
+			_batch.scale = _hold_scale;
 			_batch.temperature = NAN;
 		}
 
 		const uint8_t k = _batch.samples;
 		_batch.dt[k] = static_cast<uint16_t>(t - _batch.timestamp_sample);
-		_batch.x[k] = x;
-		_batch.y[k] = y;
-		_batch.z[k] = z;
+		_batch.x[k] = v[0];
+		_batch.y[k] = v[1];
+		_batch.z[k] = v[2];
 		_batch.samples++;
 		_last_sample_us = t;
 
@@ -281,10 +347,20 @@ private:
 	uint32_t _lost{0};
 	uint64_t _emitted{0};
 
+	// the scale the batches hold
+	bool _hold_set{false};
+	float _hold_scale{0.f};
+	uint64_t _hold_until_us{0};
+
 	// FIFO samples (input) of the present sensor
 	uint32_t _input_device_id{0};
 	uint8_t _factor{0};
+
+	// the sample clock: the time of the last message's newest sample and the sample interval, and the
+	// number of messages the filter has taken (1: started)
+	uint32_t _fits{0};
 	uint64_t _last_message_us{0};
+	uint64_t _clock_us{0};
 	float _interval_us{0.f};
 	uint64_t _last_input_us{0};
 

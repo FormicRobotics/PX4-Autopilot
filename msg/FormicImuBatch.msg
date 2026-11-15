@@ -8,7 +8,7 @@ uint64 timestamp_sample		# sample time of the first sample (microseconds)
 
 uint32 device_id		# the gyro (formic_gyro_batch) or accel (formic_accel_batch) the samples came from
 
-float32 scale			# value = raw * scale: rad/s (gyro) or m/s^2 (accel)
+float32 scale			# value = raw * scale: rad/s (gyro) or m/s^2 (accel). One per batch; a sensor beyond its fine range (ICM42688P: 4 g, 250 deg/s) sends a coarser scale, held until 1 s after its last such sample
 
 float32 temperature		# sensor temperature (degrees Celsius) at publication, from the driver's sensor_gyro / sensor_accel of device_id; NaN when unknown
 
