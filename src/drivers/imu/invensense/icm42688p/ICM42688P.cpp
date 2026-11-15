@@ -670,18 +670,23 @@ void ICM42688P::ProcessAccel(const hrt_abstime &timestamp_sample, const FIFO::DA
 		}
 
 		// 20 bit hires mode
-		// Sign extension + Accel [19:12] + Accel [11:4] + Accel [3:2] (20 bit extension byte)
+		// Sign extension + Accel [19:12] + Accel [11:4] + Accel [3:0] (upper 4 bits of the 20 bit extension byte)
 		// Accel data is 18 bit ()
 		int32_t accel_x = reassemble_20bit(fifo[i].ACCEL_DATA_X1, fifo[i].ACCEL_DATA_X0,
-						   fifo[i].Ext_Accel_X_Gyro_X & 0xF0 >> 4);
+						   (fifo[i].Ext_Accel_X_Gyro_X & 0xF0) >> 4);
 		int32_t accel_y = reassemble_20bit(fifo[i].ACCEL_DATA_Y1, fifo[i].ACCEL_DATA_Y0,
-						   fifo[i].Ext_Accel_Y_Gyro_Y & 0xF0 >> 4);
+						   (fifo[i].Ext_Accel_Y_Gyro_Y & 0xF0) >> 4);
 		int32_t accel_z = reassemble_20bit(fifo[i].ACCEL_DATA_Z1, fifo[i].ACCEL_DATA_Z0,
-						   fifo[i].Ext_Accel_Z_Gyro_Z & 0xF0 >> 4);
+						   (fifo[i].Ext_Accel_Z_Gyro_Z & 0xF0) >> 4);
 
 		// sample invalid if -524288
 		if (accel_x != -524288 && accel_y != -524288 && accel_z != -524288) {
-			// check if any values are going to exceed int16 limits
+			// shift by 2 (2 least significant bits are always 0)
+			accel_x /= 4;
+			accel_y /= 4;
+			accel_z /= 4;
+
+			// check if any values are going to exceed int16 limits (the shifted value is the one published)
 			static constexpr int16_t max_accel = INT16_MAX;
 			static constexpr int16_t min_accel = INT16_MIN;
 
@@ -697,10 +702,9 @@ void ICM42688P::ProcessAccel(const hrt_abstime &timestamp_sample, const FIFO::DA
 				scale_20bit = true;
 			}
 
-			// shift by 2 (2 least significant bits are always 0)
-			accel.x[accel.samples] = accel_x / 4;
-			accel.y[accel.samples] = accel_y / 4;
-			accel.z[accel.samples] = accel_z / 4;
+			accel.x[accel.samples] = accel_x;
+			accel.y[accel.samples] = accel_y;
+			accel.z[accel.samples] = accel_z;
 			accel.samples++;
 		}
 	}
@@ -782,7 +786,12 @@ void ICM42688P::ProcessGyro(const hrt_abstime &timestamp_sample, const FIFO::DAT
 		int32_t gyro_y = reassemble_20bit(fifo[i].GYRO_DATA_Y1, fifo[i].GYRO_DATA_Y0, fifo[i].Ext_Accel_Y_Gyro_Y & 0x0F);
 		int32_t gyro_z = reassemble_20bit(fifo[i].GYRO_DATA_Z1, fifo[i].GYRO_DATA_Z0, fifo[i].Ext_Accel_Z_Gyro_Z & 0x0F);
 
-		// check if any values are going to exceed int16 limits
+		// shift by 1 (least significant bit is always 0)
+		gyro_x /= 2;
+		gyro_y /= 2;
+		gyro_z /= 2;
+
+		// check if any values are going to exceed int16 limits (the shifted value is the one published)
 		static constexpr int16_t max_gyro = INT16_MAX;
 		static constexpr int16_t min_gyro = INT16_MIN;
 
@@ -798,10 +807,9 @@ void ICM42688P::ProcessGyro(const hrt_abstime &timestamp_sample, const FIFO::DAT
 			scale_20bit = true;
 		}
 
-		// shift by 1 (least significant bit is always 0)
-		gyro.x[gyro.samples] = gyro_x / 2;
-		gyro.y[gyro.samples] = gyro_y / 2;
-		gyro.z[gyro.samples] = gyro_z / 2;
+		gyro.x[gyro.samples] = gyro_x;
+		gyro.y[gyro.samples] = gyro_y;
+		gyro.z[gyro.samples] = gyro_z;
 		gyro.samples++;
 	}
 
