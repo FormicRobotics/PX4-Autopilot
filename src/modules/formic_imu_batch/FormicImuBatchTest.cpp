@@ -272,6 +272,206 @@ TEST(FormicImuBatch, OffAndOnAgainStartsClean)
 	EXPECT_EQ(batcher.lost(), 0u);
 }
 
+namespace
+{
+constexpr uint32_t kIcmDevice = 2490386;  // ICM42688P on SPI2, as on the bench drone
+constexpr float kIcmScale = 0.00013f;
+constexpr uint64_t kIcmIntervalUs = 125;  // 8 kHz
+
+// FIFO message `m` of an 8 kHz ICM42688P read every 1 ms: input samples n = 8m ... 8m + 7 at
+// kStartUs + n * 125 us, the newest at timestamp_sample; sample n has x = n, y = -n, z = `z`.
+void addIcmMessage(SampleBatcher &batcher, Sink &sink, int m, float reported_dt_us, float scale = kIcmScale,
+		   int16_t x_value = INT16_MIN, int16_t z = 1000)
+{
+	int16_t x[32] {}, y[32] {}, zs[32] {};
+
+	for (int i = 0; i < 8; i++) {
+		const int n = 8 * m + i;
+		x[i] = (x_value == INT16_MIN) ? static_cast<int16_t>(n) : x_value;
+		y[i] = static_cast<int16_t>(-x[i]);
+		zs[i] = z;
+	}
+
+	batcher.add(kStartUs + static_cast<uint64_t>(8 * m + 7) * kIcmIntervalUs, reported_dt_us, kIcmDevice, scale, 8, x, y,
+		    zs, sink);
+}
+
+// Every batch sample is the mean of consecutive input samples when its value and its time both point
+// at the same input sample: x == (time - kStartUs) / 125 us.
+void expectMeansOfConsecutiveSamples(const formic_imu_batch_s &b)
+{
+	for (int k = 0; k < b.samples; k++) {
+		const uint64_t t = b.timestamp_sample + b.dt[k];
+		EXPECT_EQ(t - kStartUs, static_cast<uint64_t>(b.x[k]) * kIcmIntervalUs) << "sample " << k;
+		EXPECT_EQ(b.y[k], -b.x[k]);
+	}
+}
+}
+
+// An 8 kHz ICM42688P is averaged by 5: each batch sample is the mean of 5 consecutive samples at
+// their mean time, 1.6 kHz, 32 to a batch. Its FIFO clock reports 120 us where the samples come every
+// 125 us: the measured interval places them.
+TEST(FormicImuBatch, EightKilohertzIsAveragedByFive)
+{
+	SampleBatcher batcher;
+	Sink sink;
+
+	for (int m = 0; m < 40; m++) {
+		addIcmMessage(batcher, sink, m, 120.f);
+	}
+
+	EXPECT_EQ(batcher.factor(), 5);
+	EXPECT_NEAR(batcher.inputRateHz(), 8000.f, 1.f);
+	ASSERT_EQ(sink.batches.size(), 2u);
+
+	for (int k = 0; k < 32; k++) {
+		EXPECT_EQ(sink.batches[0].x[k], 5 * k + 2);
+		EXPECT_EQ(sink.batches[0].z[k], 1000);
+	}
+
+	// the first message was placed with the reported 120 us; from the second on with the measured 125 us
+	const formic_imu_batch_s &b = sink.batches[1];
+	EXPECT_EQ(b.samples, 32);
+	EXPECT_EQ(b.device_id, kIcmDevice);
+	EXPECT_EQ(b.scale, kIcmScale);
+	EXPECT_EQ(b.timestamp_sample, kStartUs + 162 * kIcmIntervalUs);
+
+	for (int k = 0; k < 32; k++) {
+		EXPECT_EQ(b.dt[k], k * 625);
+		EXPECT_EQ(b.x[k], 5 * (32 + k) + 2);
+	}
+
+	expectMeansOfConsecutiveSamples(b);
+	EXPECT_EQ(batcher.emitted(), 64u);
+	EXPECT_EQ(batcher.lost(), 0u);
+	EXPECT_EQ(batcher.dropped(), 0u);
+}
+
+// A lost FIFO message: the part group before it is dropped, never averaged across the gap, and the
+// missing batch samples are counted (inputs 85 to 95: means at 82 and then 98, 3.2 steps apart, 2 lost).
+TEST(FormicImuBatch, AGroupNeverSpansAGap)
+{
+	SampleBatcher batcher;
+	Sink sink;
+
+	for (int m = 0; m < 41; m++) {
+		if (m != 11) {
+			addIcmMessage(batcher, sink, m, 125.f);
+		}
+	}
+
+	batcher.flush(sink);
+	ASSERT_EQ(sink.batches.size(), 2u);
+	EXPECT_EQ(sink.batches[0].x[16], 82);
+	EXPECT_EQ(sink.batches[0].x[17], 98);
+	EXPECT_EQ(sink.batches[0].samples_lost, 2u);
+	EXPECT_EQ(batcher.lost(), 2u);
+	EXPECT_EQ(batcher.emitted(), 63u);
+
+	for (const formic_imu_batch_s &b : sink.batches) {
+		expectMeansOfConsecutiveSamples(b);
+	}
+}
+
+// The ICM42688P accel switches between 16 bit data (1/8192 g) and 20 bit data scaled to 16 bit
+// (1/2048 g) from one FIFO message to the next. A group across the switch is averaged at the coarser
+// scale; each batch keeps one scale.
+TEST(FormicImuBatch, ScaleChangeInAGroupAveragesAtTheCoarserScale)
+{
+	SampleBatcher batcher;
+	Sink sink;
+	constexpr float kFine = 9.80665f / 8192.f;
+	constexpr float kCoarse = 9.80665f / 2048.f;
+
+	// the same acceleration in both: 400 * kFine == 100 * kCoarse
+	addIcmMessage(batcher, sink, 0, 125.f, kFine, 400, 8000);	// inputs 0-7
+	addIcmMessage(batcher, sink, 1, 125.f, kCoarse, 100, 2000);	// inputs 8-15
+	addIcmMessage(batcher, sink, 2, 125.f, kFine, 400, 8000);	// inputs 16-23
+	addIcmMessage(batcher, sink, 3, 125.f, kFine, 400, 8000);	// inputs 24-31
+	batcher.flush(sink);
+
+	// means of 0-4 | 5-9, 10-14, 15-19 | 20-24, 25-29
+	ASSERT_EQ(sink.batches.size(), 3u);
+	EXPECT_EQ(sink.batches[0].samples, 1);
+	EXPECT_EQ(sink.batches[0].scale, kFine);
+	EXPECT_EQ(sink.batches[0].x[0], 400);
+
+	const formic_imu_batch_s &coarse = sink.batches[1];
+	EXPECT_EQ(coarse.samples, 3);
+	EXPECT_EQ(coarse.scale, kCoarse);
+
+	for (int k = 0; k < 3; k++) {
+		EXPECT_EQ(coarse.x[k], 100);
+		EXPECT_EQ(coarse.y[k], -100);
+		EXPECT_EQ(coarse.z[k], 2000);
+	}
+
+	EXPECT_EQ(sink.batches[2].samples, 2);
+	EXPECT_EQ(sink.batches[2].scale, kFine);
+	EXPECT_EQ(sink.batches[2].x[1], 400);
+	EXPECT_EQ(batcher.lost(), 0u);
+}
+
+// The factor brings a sensor nearest 1.6 kHz: 8 kHz by 5, 3.2 kHz by 2, 1.6 kHz and slower as they are.
+// It follows the sensor: a reset (another IMU selected) takes the next sensor's.
+TEST(FormicImuBatch, FactorFollowsTheRate)
+{
+	EXPECT_EQ(SampleBatcher::averagingFactor(125.f), 5);
+	EXPECT_EQ(SampleBatcher::averagingFactor(119.47f), 5);	// as the ICM42688P on the bench drone reports
+	EXPECT_EQ(SampleBatcher::averagingFactor(312.5f), 2);
+	EXPECT_EQ(SampleBatcher::averagingFactor(625.f), 1);
+	EXPECT_EQ(SampleBatcher::averagingFactor(1000.f), 1);
+	EXPECT_EQ(SampleBatcher::averagingFactor(0.f), 1);
+	EXPECT_EQ(SampleBatcher::averagingFactor(NAN), 1);
+
+	SampleBatcher batcher;
+	Sink sink;
+	EXPECT_EQ(batcher.factor(), 0);
+	addMessage(batcher, sink, kStartUs, 1, 1);
+	EXPECT_EQ(batcher.factor(), 1);
+
+	batcher.reset();
+	addIcmMessage(batcher, sink, 100, 125.f);
+	EXPECT_EQ(batcher.factor(), 5);
+}
+
+// Samples are placed by the measured interval, not the reported dt: a sensor reporting 600 us with
+// samples every 625 us, 4 to a message. A lost message is no measurement and counts its samples.
+TEST(FormicImuBatch, TheIntervalIsMeasured)
+{
+	SampleBatcher batcher;
+	Sink sink;
+	constexpr uint64_t kIntervalUs = 625;
+
+	auto add4 = [&](int m) {
+		int16_t x[4], y[4] {}, z[4] {};
+
+		for (int i = 0; i < 4; i++) {
+			x[i] = static_cast<int16_t>(4 * m + i);
+		}
+
+		batcher.add(kStartUs + static_cast<uint64_t>(4 * m + 3) * kIntervalUs, 600.f, kDevice, kScale, 4, x, y, z, sink);
+	};
+
+	for (int m = 0; m < 24; m++) {
+		add4(m);
+	}
+
+	EXPECT_EQ(batcher.factor(), 1);
+	ASSERT_EQ(sink.batches.size(), 3u);
+	const formic_imu_batch_s &b = sink.batches[1];
+	EXPECT_EQ(b.timestamp_sample, kStartUs + 32 * kIntervalUs);
+
+	for (int k = 0; k < 32; k++) {
+		EXPECT_EQ(b.dt[k], k * kIntervalUs);
+		EXPECT_EQ(b.x[k], 32 + k);
+	}
+
+	add4(25);	// message 24 lost
+	EXPECT_NEAR(batcher.inputRateHz(), 1600.f, 0.01f);
+	EXPECT_EQ(batcher.lost(), 4u);
+}
+
 // Off until the default is set; then the default's state, set by the parameter.
 TEST(FormicBatchGate, StartsInTheDefaultState)
 {
