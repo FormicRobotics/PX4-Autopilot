@@ -54,6 +54,13 @@ __EXPORT void board_on_reset(int status) {}
 
 __EXPORT void stm32_boardinitialize(void)
 {
+	/* Hold the motor lines low through the bootloader wait (see BOARD_BDSHOT_RESET_GPIOS) */
+	const uint32_t motor_low[] = BOARD_BDSHOT_RESET_GPIOS;
+
+	for (unsigned i = 0; i < sizeof(motor_low) / sizeof(motor_low[0]); ++i) {
+		stm32_configgpio(motor_low[i]);
+	}
+
 	/* configure USB interfaces */
 	stm32_usbinitialize();
 }

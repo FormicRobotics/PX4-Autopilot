@@ -137,6 +137,16 @@
  */
 #define BOARD_BIDIRECTIONAL_DSHOT_TIMER_INDEX 1
 
+/*
+ * The bidirectional DShot lines (TIM5 CH1-4, PA0-PA3) driven low. The bootloader
+ * holds them there through its wait, so the ESC sees a clean low from power-up
+ * until the dshot driver takes the pins over. A line that is high or floating
+ * while the ESC powers up leaves that ESC channel silent and its motor dead.
+ */
+#define GPIO_MOTOR_LOW(pin)  (GPIO_OUTPUT | GPIO_PUSHPULL | GPIO_SPEED_2MHz | GPIO_OUTPUT_CLEAR | GPIO_PORTA | (pin))
+#define BOARD_BDSHOT_RESET_GPIOS {GPIO_MOTOR_LOW(GPIO_PIN0), GPIO_MOTOR_LOW(GPIO_PIN1), \
+		GPIO_MOTOR_LOW(GPIO_PIN2), GPIO_MOTOR_LOW(GPIO_PIN3)}
+
 /* Spare GPIO */
 
 // #define GPIO_PG6                        /* PG6  */  (GPIO_INPUT|GPIO_PULLUP|GPIO_PORTG|GPIO_PIN6)
