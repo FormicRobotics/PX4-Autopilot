@@ -9,6 +9,7 @@
 #include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionCallback.hpp>
+#include <uORB/topics/estimator_selector_status.h>
 #include <uORB/topics/formic_batch_enable.h>
 #include <uORB/topics/formic_imu_batch.h>
 #include <uORB/topics/parameter_update.h>
@@ -25,12 +26,14 @@
 using namespace time_literals;
 
 /**
- * Every FIFO sample of the IMU EKF2 flies on, for the Jetson.
+ * The FIFO samples of the IMU EKF2 flies on, for the Jetson.
  *
- * Follows sensor_selection to the gyro and accel in use, reads their sensor_gyro_fifo and
+ * Follows the gyro and accel in use (the EKF2 selector's estimator_selector_status, or
+ * sensor_selection when SENS_IMU_MODE is 1 and no selector runs), reads their sensor_gyro_fifo and
  * sensor_accel_fifo on every publication and publishes the samples in batches on
- * formic_gyro_batch and formic_accel_batch. Each batch carries the sensor temperature from the
- * newest sensor_gyro / sensor_accel of its device.
+ * formic_gyro_batch and formic_accel_batch. A sensor faster than 1.6 kHz is averaged down to about
+ * 1.6 kHz (SampleBatcher). Each batch carries the sensor temperature from the newest sensor_gyro /
+ * sensor_accel of its device.
  *
  * Publishes only while its gate is on (BatchGate): FORMIC_BATCH_DEF at boot and after a disarm,
  * formic_batch_enable in between. While off, the FIFO callbacks are unregistered and the module
@@ -62,7 +65,7 @@ private:
 	/// Unregisters the FIFO callbacks and drops the partly filled batches.
 	void stopBatching();
 
-	/// Follows sensor_selection: the FIFO and report instances of the gyro and accel in use.
+	/// Follows the gyro and accel in use to their FIFO and report instances.
 	void updateSelection();
 
 	/// Publishes a batch, stamped now, with `temperature` (degrees Celsius, NaN when unknown).
@@ -81,6 +84,9 @@ private:
 	template<typename T>
 	static float reportTemperature(uORB::Subscription (&subs)[MAX_INSTANCES], int instance, uint32_t device_id);
 
+	// the IMU in use: with SENS_IMU_MODE 0 the EKF2 selector picks it. It also publishes sensor_selection,
+	// but the sensors module publishes its own first vote there before the selector starts.
+	uORB::Subscription _estimator_selector_status_sub{ORB_ID(estimator_selector_status)};
 	uORB::Subscription _sensor_selection_sub{ORB_ID(sensor_selection)};
 	uORB::Subscription _parameter_update_sub{ORB_ID(parameter_update)};
 	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
@@ -150,6 +156,7 @@ private:
 	perf_counter_t _cycle_perf{perf_alloc(PC_ELAPSED, MODULE_NAME": cycle")};
 
 	DEFINE_PARAMETERS(
-		(ParamInt<px4::params::FORMIC_BATCH_DEF>) _param_formic_batch_def
+		(ParamInt<px4::params::FORMIC_BATCH_DEF>) _param_formic_batch_def,
+		(ParamInt<px4::params::SENS_IMU_MODE>) _param_sens_imu_mode
 	)
 };

@@ -78,7 +78,7 @@ publications:
   type: px4_msgs::msg::Wind
   rate_limit: 1
 
-# every FIFO sample of the IMU EKF2 flies on, up to 32 per message (formic_imu_batch); about 50 Hz each
+# the FIFO samples of the IMU EKF2 flies on, averaged down to about 1.6 kHz, up to 32 per message (formic_imu_batch); about 50 Hz each
 - topic: /fmu/out/formic_gyro_batch
   type: px4_msgs::msg::FormicImuBatch
 

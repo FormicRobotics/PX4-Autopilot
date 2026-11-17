@@ -6,9 +6,17 @@
 board_adc start
 
 # ───────────────────────────────────────────────────────────────
-# IMU 1 – BMI270
-# PX4 enum: ROTATION_YAW_270 = 6
-bmi270    -R 6 -s start
+# IMUs: BMI270 (SPI1, PX4 enum ROTATION_YAW_270 = 6) and ICM42688P (SPI2).
+# The IMU started first is vehicle_imu instance 0: EKF2, formic_vio_est, the rate controller and
+# formic_imu_batch use it. FORMIC_IMU_SEL picks it (0 BMI270, 1 ICM42688P).
+if param compare -s FORMIC_IMU_SEL 1
+then
+	icm42688p -s start
+	bmi270    -R 6 -s start
+else
+	bmi270    -R 6 -s start
+	icm42688p -s start
+fi
 
 # Magnetometers
 # BMM150 (ArduPilot: I2C:0:0x10, ROTATION_YAW_180)
@@ -18,9 +26,6 @@ bmm150    -I -b 2 -R 4 start
 # LIS3MDL (ArduPilot: I2C:0:0x1C, ROTATION_ROLL_180_YAW_90)
 # PX4 enum: ROTATION_ROLL_180_YAW_270 = 14
 lis3mdl   -I -a 30 -b 2 -R 14 start
-
-# IMU 2 – ICM42688P
-icm42688p -s start
 
 # Barometers (ArduPilot lists DPS310 a.k.a. DPS368 and BMP388)
 dps310    -s start

@@ -103,20 +103,37 @@ void FormicImuBatch::stopBatching()
 
 void FormicImuBatch::updateSelection()
 {
-	sensor_selection_s selection;
+	// nothing until the source has published: no batches of another IMU at boot
+	uint32_t gyro_device_id = _gyro_device_id;
+	uint32_t accel_device_id = _accel_device_id;
 
-	if (_sensor_selection_sub.copy(&selection)) {
-		if (selection.gyro_device_id != _gyro_device_id) {
-			_gyro_device_id = selection.gyro_device_id;
-			_gyro_instance = NONE;
-			_gyro_report_instance = NONE;
+	if (_param_sens_imu_mode.get() == 0) {
+		estimator_selector_status_s selector_status;
+
+		if (_estimator_selector_status_sub.copy(&selector_status)) {
+			gyro_device_id = selector_status.gyro_device_id;
+			accel_device_id = selector_status.accel_device_id;
 		}
 
-		if (selection.accel_device_id != _accel_device_id) {
-			_accel_device_id = selection.accel_device_id;
-			_accel_instance = NONE;
-			_accel_report_instance = NONE;
+	} else {
+		sensor_selection_s selection;
+
+		if (_sensor_selection_sub.copy(&selection)) {
+			gyro_device_id = selection.gyro_device_id;
+			accel_device_id = selection.accel_device_id;
 		}
+	}
+
+	if (gyro_device_id != _gyro_device_id) {
+		_gyro_device_id = gyro_device_id;
+		_gyro_instance = NONE;
+		_gyro_report_instance = NONE;
+	}
+
+	if (accel_device_id != _accel_device_id) {
+		_accel_device_id = accel_device_id;
+		_accel_instance = NONE;
+		_accel_report_instance = NONE;
 	}
 
 	// the report instance of a device need not equal its FIFO instance
@@ -268,6 +285,8 @@ int FormicImuBatch::print_status()
 	PX4_INFO("accel %" PRIu32 " fifo %d: sent %" PRIu64 ", missing %" PRIu32 ", queue lost %" PRIu32 ", out of order %" PRIu32,
 		 _accel_device_id, _accel_instance, _accel_batcher.emitted(), _accel_batcher.lost(), _accel_queue_overflow,
 		 _accel_batcher.dropped());
+	PX4_INFO("averaged: gyro %.0f Hz / %u, accel %.0f Hz / %u", (double)_gyro_batcher.inputRateHz(),
+		 _gyro_batcher.factor(), (double)_accel_batcher.inputRateHz(), _accel_batcher.factor());
 	perf_print_counter(_cycle_perf);
 	return 0;
 }
@@ -308,10 +327,14 @@ int FormicImuBatch::print_usage(const char *reason)
 	PRINT_MODULE_DESCRIPTION(
 		R"DESCR_STR(
 ### Description
-Every FIFO sample of the IMU EKF2 flies on, for the Jetson. Follows sensor_selection to the gyro and
-accel in use and publishes their sensor_gyro_fifo / sensor_accel_fifo samples in batches of up to 32
-on formic_gyro_batch and formic_accel_batch, each sample with its own time. Each batch carries the
-sensor temperature from the driver's sensor_gyro / sensor_accel.
+The FIFO samples of the IMU EKF2 flies on, for the Jetson. Follows the gyro and accel in use (the
+EKF2 selector's estimator_selector_status; sensor_selection when SENS_IMU_MODE is 1) and publishes
+their sensor_gyro_fifo / sensor_accel_fifo samples in batches of up to 32 on formic_gyro_batch and
+formic_accel_batch, each sample with its own time. A sensor faster than 1.6 kHz is averaged down to
+about 1.6 kHz: an 8 kHz ICM42688P by 5, each batch sample the mean of 5 consecutive samples. Each
+batch carries the sensor temperature from the driver's sensor_gyro / sensor_accel.
+
+FORMIC_IMU_SEL picks the IMU on boards with two (see rc.board_sensors).
 
 Publishes while its gate is on: FORMIC_BATCH_DEF sets the state at boot and after every disarm, and a
 formic_batch_enable message (/fmu/in/formic_batch_enable) turns it on or off in between.
