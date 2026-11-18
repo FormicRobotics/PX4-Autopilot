@@ -131,6 +131,12 @@ bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource
 ///////add by naor ////////////////
 bool UserModeIntention::modeRequiresPosition(uint8_t nav_state) const
 {
+	// Offboard has no static position requirement upstream, but our companion
+	// drives it with position/velocity setpoints that need the EV feed.
+	if (nav_state == vehicle_status_s::NAVIGATION_STATE_OFFBOARD) {
+		return true;
+	}
+	
 	const failsafe_flags_s &flags = _health_and_arming_checks.failsafeFlags();
 	const uint32_t bit = 1u << nav_state;
 	return (flags.mode_req_local_position & bit) || (flags.mode_req_global_position & bit)
