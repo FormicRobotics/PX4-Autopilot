@@ -130,14 +130,6 @@
 #define BOARD_HAS_PWM  DIRECT_PWM_OUTPUT_CHANNELS
 
 /*
- * Bidirectional DShot only supports a single timer (see _bidi_timer_index in
- * dshot.c). Timer index 1 is TIM5 (Motors 1-4), which has all 4 channels
- * mapped to a valid capture DMA request on STM32H7 (unlike TIM4/Motors 5-8,
- * whose channel 4 has no DMA capture line), so it's used as the bidir group.
- */
-#define BOARD_BIDIRECTIONAL_DSHOT_TIMER_INDEX 1
-
-/*
  * The bidirectional DShot lines (TIM5 CH1-4, PA0-PA3) driven low. The bootloader
  * holds them there through its wait, so the ESC sees a clean low from power-up
  * until the dshot driver takes the pins over. A line that is high or floating

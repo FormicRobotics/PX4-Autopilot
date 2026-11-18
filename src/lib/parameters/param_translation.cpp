@@ -163,5 +163,40 @@ param_modify_on_import_ret param_modify_on_import(bson_node_t node)
 		}
 	}
 
+	// 2026-03-11: translate MOT_POLE_COUNT to per-motor DSHOT_MOT_POL1-8
+	{
+		if ((node->type == bson_type_t::BSON_INT32) && (strcmp("MOT_POLE_COUNT", node->name) == 0)) {
+			for (int i = 1; i <= 8; i++) {
+				char name[20];
+				snprintf(name, sizeof(name), "DSHOT_MOT_POL%d", i);
+				param_set(param_find(name), &node->i32);
+			}
+
+			PX4_INFO("migrating %s -> DSHOT_MOT_POL1-8 (value=%" PRId32 ")", "MOT_POLE_COUNT", node->i32);
+			return param_modify_on_import_ret::PARAM_SKIP_IMPORT;
+		}
+	}
+
+	// 2026-11-18: DSHOT_BIDIR_EN is gone, bidirectional DShot is selected per timer group
+	// (PWM_MAIN_TIMx / PWM_AUX_TIMx = BDShot150/300/600). Parameters are stored sorted by
+	// name, so DSHOT_BIDIR_EN is seen before the timer parameters it applies to.
+	{
+		static bool dshot_bidir_en = false;
+
+		if ((node->type == bson_type_t::BSON_INT32) && (strcmp("DSHOT_BIDIR_EN", node->name) == 0)) {
+			dshot_bidir_en = node->i32 != 0;
+			return param_modify_on_import_ret::PARAM_SKIP_IMPORT;
+		}
+
+		if (dshot_bidir_en && (node->type == bson_type_t::BSON_INT32)
+		    && (strncmp("PWM_MAIN_TIM", node->name, 12) == 0 || strncmp("PWM_AUX_TIM", node->name, 11) == 0)
+		    && node->i32 >= -5 && node->i32 <= -3) {
+			// DShot150/300/600 (-5/-4/-3) -> BDShot150/300/600 (-8/-7/-6)
+			node->i32 -= 3;
+			PX4_INFO("migrating DSHOT_BIDIR_EN -> %s (value=%" PRId32 ")", node->name, node->i32);
+			return param_modify_on_import_ret::PARAM_MODIFIED;
+		}
+	}
+
 	return param_modify_on_import_ret::PARAM_NOT_MODIFIED;
 }

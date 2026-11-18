@@ -888,9 +888,14 @@ int io_timer_channel_init(unsigned channel, io_timer_channel_mode_t mode,
 #if !defined(BOARD_HAS_NO_CAPTURE)
 
 	case IOTimerChanMode_Capture:
-	case IOTimerChanMode_CaptureDMA:
 		setbits = CCMR_C1_CAPTURE_INIT;
 		gpio = timer_io_channels[channel].gpio_in;
+		break;
+
+	case IOTimerChanMode_CaptureDMA:
+		// Bidirectional DShot idles high: hold the line there while it is an input
+		setbits = CCMR_C1_CAPTURE_INIT;
+		gpio = timer_io_channels[channel].gpio_in | GPIO_PULLUP;
 		break;
 #endif
 
