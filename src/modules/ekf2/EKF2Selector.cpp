@@ -676,6 +676,7 @@ void EKF2Selector::PublishVehicleGlobalPosition()
 
 		// save last primary estimator_global_position as published with original resets
 		_global_position_last = global_position;
+		_formic_alt_ellipsoid_offset = global_position.alt_ellipsoid - global_position.alt;
 
 		if (publish) {
 			// republish with total reset count and current timestamp
@@ -1528,6 +1529,45 @@ void EKF2Selector::FormicPublishVehicleLocalPosition()
 		lpos.ref_timestamp = math::max(lpos.ref_timestamp, _formic_ref_change);
 	}
 
+	if (_formic_origin_fitted) {
+		if (_selected_instance == FORMIC_EKF_INSTANCE) {
+			if (lpos.xy_global && lpos.z_global && PX4_ISFINITE(lpos.ref_lat) && PX4_ISFINITE(lpos.ref_lon)
+			    && PX4_ISFINITE(lpos.ref_alt)) {
+				_formic_ref_lat = lpos.ref_lat;
+				_formic_ref_lon = lpos.ref_lon;
+				_formic_ref_alt = lpos.ref_alt;
+				_formic_ref_timestamp = lpos.ref_timestamp;
+				_formic_ref_valid = true;
+			}
+
+		} else if (_selected_instance == FORMIC_VIO_INSTANCE) {
+			if (!_formic_ref_valid) {
+				// the origin was fitted while the VIO instance was published: EKF2's origin moved by its shift
+				vehicle_local_position_s lpos0;
+
+				if (_formic_lpos_sub[FORMIC_EKF_INSTANCE].copy(&lpos0) && lpos0.xy_global && lpos0.z_global
+				    && PX4_ISFINITE(lpos0.ref_lat) && PX4_ISFINITE(lpos0.ref_lon) && PX4_ISFINITE(lpos0.ref_alt)) {
+					const Vector3f &t0 = _formic_anchor[FORMIC_EKF_INSTANCE].t;
+					const MapProjection ekf_origin(lpos0.ref_lat, lpos0.ref_lon);
+					ekf_origin.reproject(-t0(0), -t0(1), _formic_ref_lat, _formic_ref_lon);
+					_formic_ref_alt = lpos0.ref_alt + t0(2);
+					_formic_ref_timestamp = math::max(lpos0.ref_timestamp, _formic_ref_change);
+					_formic_ref_valid = true;
+				}
+			}
+
+			// the handover carried the published position on, so the published origin is still the same one
+			if (_formic_ref_valid) {
+				lpos.xy_global = true;
+				lpos.z_global = true;
+				lpos.ref_lat = _formic_ref_lat;
+				lpos.ref_lon = _formic_ref_lon;
+				lpos.ref_alt = _formic_ref_alt;
+				lpos.ref_timestamp = _formic_ref_timestamp;
+			}
+		}
+	}
+
 	lpos.xy_reset_counter = _xy_reset_counter;
 	lpos.z_reset_counter = _z_reset_counter;
 	lpos.vxy_reset_counter = _vxy_reset_counter;
@@ -1547,11 +1587,54 @@ void EKF2Selector::FormicPublishVehicleLocalPosition()
 	_local_position_last = lpos;
 	PublishControlState(lpos);
 
+	if ((_selected_instance == FORMIC_VIO_INSTANCE) && lpos.xy_global && lpos.z_global) {
+		FormicPublishVehicleGlobalPosition(lpos);
+	}
+
 	formic_frames::PoseSample s;
 	s.time_us = lpos.timestamp_sample;
 	s.p = p;
 	s.v = v;
 	_formic_lpos_history.push(s);
+}
+
+void EKF2Selector::FormicPublishVehicleGlobalPosition(const vehicle_local_position_s &lpos)
+{
+	// The VIO instance publishes no global position. In the GPS frame it is the published local position
+	// on the published origin, so a mode that needs a global position carries on over a switch to the VIO.
+	vehicle_global_position_s gpos{};
+	gpos.timestamp_sample = lpos.timestamp_sample;
+
+	const MapProjection origin(lpos.ref_lat, lpos.ref_lon);
+	origin.reproject(lpos.x, lpos.y, gpos.lat, gpos.lon);
+	gpos.alt = lpos.ref_alt - lpos.z;
+	gpos.alt_ellipsoid = gpos.alt + _formic_alt_ellipsoid_offset;
+	gpos.lat_lon_valid = lpos.xy_valid;
+	gpos.alt_valid = lpos.z_valid;
+	gpos.eph = lpos.eph;
+	gpos.epv = lpos.epv;
+	gpos.dead_reckoning = lpos.dead_reckoning;
+
+	if (lpos.dist_bottom_valid) {
+		gpos.terrain_alt = gpos.alt - lpos.dist_bottom;
+		gpos.terrain_alt_valid = true;
+	}
+
+	gpos.lat_lon_reset_counter = _lat_lon_reset_counter;
+	gpos.alt_reset_counter = _alt_reset_counter;
+	gpos.terrain_reset_counter = _terrain_reset_counter;
+	gpos.delta_alt = _delta_alt_reset;
+	gpos.delta_terrain = _delta_terrain_reset;
+
+	// back on EKF2 its global position counts as a change of instance: a step there is announced as a reset
+	_global_position_instance_prev = INVALID_INSTANCE;
+	_global_position_last.lat = gpos.lat;
+	_global_position_last.lon = gpos.lon;
+	_global_position_last.alt = gpos.alt;
+	_global_position_last.timestamp_sample = gpos.timestamp_sample;
+
+	gpos.timestamp = hrt_absolute_time();
+	_vehicle_global_position_pub.publish(gpos);
 }
 
 void EKF2Selector::FormicPublishVehicleOdometry()

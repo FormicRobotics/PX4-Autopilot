@@ -155,6 +155,7 @@ private:
 
 	void FormicPublishVehicleAttitude();
 	void FormicPublishVehicleLocalPosition();
+	void FormicPublishVehicleGlobalPosition(const vehicle_local_position_s &lpos);
 	void FormicPublishVehicleOdometry();
 
 	// Subscriptions (per estimator instance)
@@ -318,6 +319,14 @@ private:
 	uint8_t _formic_ekf_heading_counter{0};           ///< EKF2's own heading resets, followed while the VIO is published
 	hrt_abstime _formic_frame_change{0};              ///< the published frame was turned: no handover right after
 	hrt_abstime _formic_ref_change{0};                ///< EKF2's anchor shift changed: the published origin moved
+	// The published origin, as last published on EKF2. The VIO instance has no origin of its own: flown in the
+	// GPS frame it carries this one, and its global position is made from it.
+	bool _formic_ref_valid{false};
+	double _formic_ref_lat{0.0};
+	double _formic_ref_lon{0.0};
+	float _formic_ref_alt{0.f};
+	hrt_abstime _formic_ref_timestamp{0};
+	float _formic_alt_ellipsoid_offset{0.f};          ///< ellipsoid altitude minus AMSL altitude, from EKF2
 	hrt_abstime _formic_source_status_last{0};
 	formic_source_status_s _formic_source_status_prev{};
 	float _formic_gps_speed{NAN};
