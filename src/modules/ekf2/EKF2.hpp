@@ -316,6 +316,15 @@ private:
 	uORB::PublicationMulti<estimator_aid_source3d_s> _estimator_aid_src_mag_pub{ORB_ID(estimator_aid_src_mag)};
 #endif // CONFIG_EKF2_MAGNETOMETER
 
+	// add by naor: not part of the external vision input, EKF2 never sees vision //
+	// the selector sets EKF2's horizontal velocity at a handover from the VIO instance
+	void UpdateFormicVelocityReset();
+	bool _formic_vio_mode{false};	///< instance 0 behind the selector (multi mode)
+	uORB::Subscription _formic_ekf_vel_reset_sub{ORB_ID(formic_ekf_vel_reset)};
+	uint8_t _formic_vel_reset_sequence{0};
+	bool _formic_vel_reset_seen{false};
+	// add by naor //
+
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
 	uORB::PublicationMulti<estimator_aid_source1d_s> _estimator_aid_src_ev_hgt_pub {ORB_ID(estimator_aid_src_ev_hgt)};
 	uORB::PublicationMulti<estimator_aid_source2d_s> _estimator_aid_src_ev_pos_pub{ORB_ID(estimator_aid_src_ev_pos)};
@@ -329,15 +338,6 @@ private:
 	matrix::Vector3f _last_ev_bias_published{};
 
 	uORB::Subscription _ev_odom_sub{ORB_ID(vehicle_visual_odometry)};
-
-	// add by naor //
-	// the selector sets EKF2's horizontal velocity at a handover from the VIO instance
-	void UpdateFormicVelocityReset();
-	bool _formic_vio_mode{false};	///< instance 0 behind the selector (multi mode)
-	uORB::Subscription _formic_ekf_vel_reset_sub{ORB_ID(formic_ekf_vel_reset)};
-	uint8_t _formic_vel_reset_sequence{0};
-	bool _formic_vel_reset_seen{false};
-	// add by naor //
 
 	uORB::PublicationMulti<estimator_bias3d_s> _estimator_ev_pos_bias_pub{ORB_ID(estimator_ev_pos_bias)};
 #endif // CONFIG_EKF2_EXTERNAL_VISION
