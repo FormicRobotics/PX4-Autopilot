@@ -234,5 +234,7 @@ subscriptions:
 
 # Create uORB::PublicationMulti
 subscriptions_multi:
+# /fmu/in/distance_sensor0 .. /fmu/in/distance_sensor9, one uORB distance_sensor instance per topic
 - topic: /fmu/in/distance_sensor
   type: px4_msgs::msg::DistanceSensor
+  instances: 10

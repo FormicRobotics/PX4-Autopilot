@@ -6,17 +6,12 @@
 board_adc start
 
 # ───────────────────────────────────────────────────────────────
-# IMUs: BMI270 (SPI1, PX4 enum ROTATION_YAW_270 = 6) and ICM42688P (SPI2).
-# The IMU started first is vehicle_imu instance 0: EKF2, formic_vio_est, the rate controller and
-# formic_imu_batch use it. FORMIC_IMU_SEL picks it (0 BMI270, 1 ICM42688P).
-if param compare -s FORMIC_IMU_SEL 1
-then
-	icm42688p -s start
-	bmi270    -R 6 -s start
-else
-	bmi270    -R 6 -s start
-	icm42688p -s start
-fi
+# IMU: ICM42688P (SPI2). It is vehicle_imu instance 0: EKF2, formic_vio_est, the rate controller and
+# formic_imu_batch use it.
+# The BMI270 on SPI1 is not used: its driver is not in the build (default.px4board), which frees its
+# CPU time. Its chip select stays in src/spi.cpp so the chip is held deselected on the bus it shares
+# with the DPS310. FORMIC_IMU_SEL has no effect on this board.
+icm42688p -s start
 
 # Magnetometers
 # BMM150 (ArduPilot: I2C:0:0x10, ROTATION_YAW_180)

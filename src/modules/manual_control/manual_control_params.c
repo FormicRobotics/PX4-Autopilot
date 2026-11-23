@@ -75,3 +75,43 @@ PARAM_DEFINE_FLOAT(MAN_KILL_GEST_T, -1.f);
  * @group Manual Control
  */
 PARAM_DEFINE_FLOAT(MAN_DEADZONE, 0.1f);
+
+/**
+ * RC channel that requests Land mode
+ *
+ * When the pulse width of this RC channel rises above FORMIC_LAND_US while the
+ * vehicle is armed and in flight, Land mode is requested once. Releasing the
+ * channel does nothing: leave Land mode with the mode switch or the sticks.
+ *
+ * The channel is read raw from the receiver (input_rc), without the RC calibration.
+ *
+ * @min 0
+ * @max 18
+ * @value 0 Disabled
+ * @value 5 Channel 5
+ * @value 6 Channel 6
+ * @value 7 Channel 7
+ * @value 8 Channel 8
+ * @value 9 Channel 9
+ * @value 10 Channel 10
+ * @value 11 Channel 11
+ * @value 12 Channel 12
+ * @value 13 Channel 13
+ * @value 14 Channel 14
+ * @value 15 Channel 15
+ * @value 16 Channel 16
+ * @value 17 Channel 17
+ * @value 18 Channel 18
+ * @group Manual Control
+ */
+PARAM_DEFINE_INT32(FORMIC_LAND_CH, 0);
+
+/**
+ * Pulse width above which the FORMIC_LAND_CH channel requests Land mode
+ *
+ * @unit us
+ * @min 800
+ * @max 2200
+ * @group Manual Control
+ */
+PARAM_DEFINE_INT32(FORMIC_LAND_US, 1700);

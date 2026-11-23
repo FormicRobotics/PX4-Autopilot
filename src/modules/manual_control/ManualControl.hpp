@@ -42,10 +42,12 @@
 #include <px4_platform_common/posix.h>
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
 #include <uORB/topics/action_request.h>
+#include <uORB/topics/input_rc.h>
 #include <uORB/topics/landing_gear.h>
 #include <uORB/topics/manual_control_switches.h>
 #include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/parameter_update.h>
+#include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/Publication.hpp>
 #include <uORB/SubscriptionInterval.hpp>
@@ -86,6 +88,7 @@ private:
 	void updateParams() override;
 	void processStickArming(const manual_control_setpoint_s &input);
 	void processSwitches(hrt_abstime &now);
+	void processLandChannel();
 
 	void evaluateModeSlot(uint8_t mode_slot);
 	void sendActionRequest(int8_t action, int8_t source, int8_t mode = 0);
@@ -107,6 +110,8 @@ private:
 	uORB::SubscriptionCallbackWorkItem _manual_control_switches_sub{this, ORB_ID(manual_control_switches)};
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
+	uORB::Subscription _input_rc_sub{ORB_ID(input_rc)};
+	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
 
 	uORB::Publication<action_request_s> _action_request_pub{ORB_ID(action_request)};
 	uORB::Publication<landing_gear_s> _landing_gear_pub{ORB_ID(landing_gear)};
@@ -137,6 +142,15 @@ private:
 	unsigned _image_sequence{0};
 	bool _video_recording{false};
 
+	// Land channel (FORMIC_LAND_CH): pulse width needed below the threshold before the channel counts as released
+	static constexpr int32_t LAND_CHANNEL_HYSTERESIS_US{50};
+	bool _land_channel_initialized{false};
+	bool _land_channel_high{false};
+	bool _landed{true};
+	int32_t _land_channel_pulse_us{-1}; ///< last pulse width read, -1 while the channel is not usable
+	unsigned _land_channel_presses{0};
+	orb_advert_t _mavlink_log_pub{nullptr};
+
 	bool _armed{false};
 	uint8_t _system_id{1};
 	bool _rotary_wing{false};
@@ -155,6 +169,8 @@ private:
 		(ParamInt<px4::params::COM_FLTMODE3>) _param_fltmode_3,
 		(ParamInt<px4::params::COM_FLTMODE4>) _param_fltmode_4,
 		(ParamInt<px4::params::COM_FLTMODE5>) _param_fltmode_5,
-		(ParamInt<px4::params::COM_FLTMODE6>) _param_fltmode_6
+		(ParamInt<px4::params::COM_FLTMODE6>) _param_fltmode_6,
+		(ParamInt<px4::params::FORMIC_LAND_CH>) _param_formic_land_ch,
+		(ParamInt<px4::params::FORMIC_LAND_US>) _param_formic_land_us
 	)
 };

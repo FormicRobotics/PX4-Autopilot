@@ -120,8 +120,26 @@ merged_em_globals['subscriptions'] = msg_map['subscriptions'] if subs_not_empty 
 
 subs_multi_not_empty = msg_map['subscriptions_multi'] is not None
 if subs_multi_not_empty:
+    expanded_subs_multi = []
+
     for sm in msg_map['subscriptions_multi']:
         process_message_type(sm)
+        # uORB topic the data is published on
+        sm['orb_topic'] = sm['topic_simple']
+        instances = int(sm.get('instances', 0))
+
+        if instances <= 0:
+            expanded_subs_multi.append(sm)
+            continue
+
+        # 'instances: N' gives N DDS topics <topic>0 .. <topic>N-1, each with its own uORB instance
+        for i in range(instances):
+            numbered = dict(sm)
+            numbered['topic'] = f"{sm['topic']}{i}"
+            numbered['topic_simple'] = f"{sm['topic_simple']}{i}"
+            expanded_subs_multi.append(numbered)
+
+    msg_map['subscriptions_multi'] = expanded_subs_multi
 
 merged_em_globals['subscriptions_multi'] = msg_map['subscriptions_multi'] if subs_multi_not_empty else []
 

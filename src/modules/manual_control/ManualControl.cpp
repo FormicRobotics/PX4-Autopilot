@@ -159,6 +159,7 @@ void ManualControl::processInput(hrt_abstime now)
 	}
 
 	processSwitches(now);
+	processLandChannel();
 
 	_timestamp_last_loop = now;
 }
@@ -303,6 +304,68 @@ void ManualControl::processSwitches(hrt_abstime &now)
 		// Don't react on switch changes while RC was not in use
 		_previous_switches_initialized = false;
 	}
+}
+
+void ManualControl::processLandChannel()
+{
+	vehicle_land_detected_s land_detected;
+
+	if (_vehicle_land_detected_sub.update(&land_detected)) {
+		_landed = land_detected.landed;
+	}
+
+	input_rc_s input_rc;
+
+	if (!_input_rc_sub.update(&input_rc)) {
+		return;
+	}
+
+	const int32_t channel = _param_formic_land_ch.get();
+
+	// Same rule as the switches: only while RC is the source in use
+	const bool usable = (channel >= 1) && (channel <= input_rc.channel_count)
+			    && (channel <= input_rc_s::RC_INPUT_MAX_CHANNELS)
+			    && !input_rc.rc_lost && !input_rc.rc_failsafe
+			    && _selector.setpoint().valid
+			    && (_selector.setpoint().data_source == manual_control_setpoint_s::SOURCE_RC);
+
+	if (!usable) {
+		// The first sample after RC returns only sets the state, it never requests a landing
+		_land_channel_initialized = false;
+		_land_channel_pulse_us = -1;
+		return;
+	}
+
+	const int32_t pulse_us = input_rc.values[channel - 1];
+	const int32_t threshold_us = _param_formic_land_us.get();
+
+	bool high = _land_channel_high;
+
+	if (!_land_channel_initialized || (pulse_us > threshold_us)) {
+		high = (pulse_us > threshold_us);
+
+	} else if (pulse_us < threshold_us - LAND_CHANNEL_HYSTERESIS_US) {
+		high = false;
+	}
+
+	// Land mode on the press only, and only in flight. Commander refuses it when Land mode cannot run.
+	if (_land_channel_initialized && high && !_land_channel_high) {
+		_land_channel_presses++;
+
+		if (_armed && !_landed) {
+			sendActionRequest(action_request_s::ACTION_SWITCH_MODE, action_request_s::SOURCE_RC_SWITCH,
+					  vehicle_status_s::NAVIGATION_STATE_AUTO_LAND);
+			mavlink_log_info(&_mavlink_log_pub, "Land channel pressed: Land mode requested");
+
+		} else {
+			// Shown on the ground too, so the channel and the threshold can be checked without flying
+			mavlink_log_info(&_mavlink_log_pub, "Land channel pressed: ignored, %s", _armed ? "landed" : "disarmed");
+		}
+	}
+
+	_land_channel_pulse_us = pulse_us;
+	_land_channel_high = high;
+	_land_channel_initialized = true;
 }
 
 void ManualControl::updateParams()
@@ -542,6 +605,20 @@ int ManualControl::print_status()
 {
 	perf_print_counter(_loop_perf);
 	perf_print_counter(_loop_interval_perf);
+
+	if (_param_formic_land_ch.get() < 1) {
+		PX4_INFO("land channel: disabled (FORMIC_LAND_CH 0)");
+
+	} else if (_land_channel_pulse_us < 0) {
+		PX4_INFO("land channel %d: no usable RC", (int)_param_formic_land_ch.get());
+
+	} else {
+		PX4_INFO("land channel %d: %d us, threshold %d us, %s, presses %u, vehicle %s",
+			 (int)_param_formic_land_ch.get(), (int)_land_channel_pulse_us, (int)_param_formic_land_us.get(),
+			 _land_channel_high ? "PRESSED" : "released", _land_channel_presses,
+			 (_armed && !_landed) ? "in flight" : (_armed ? "landed" : "disarmed"));
+	}
+
 	return 0;
 }
 
