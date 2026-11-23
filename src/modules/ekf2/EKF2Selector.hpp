@@ -58,11 +58,15 @@
 #include <uORB/topics/formic_control_state.h>
 #include <uORB/topics/formic_ekf_vel_reset.h>
 #include <uORB/topics/formic_pos_req.h>
+#include <uORB/topics/formic_source_status.h>
 #include <uORB/topics/formic_vio_est_status.h>
+#include <uORB/topics/estimator_status_flags.h>
+#include <uORB/topics/sensor_gps.h>
 
 #include <lib/formic_frames/anchor.hpp>
 #include <lib/formic_frames/control_state.hpp>
 #include <lib/formic_frames/pose_history.hpp>
+#include <lib/formic_frames/source_arbiter.hpp>
 
 #if CONSTRAINED_MEMORY
 # define EKF2_MAX_INSTANCES 2
@@ -107,14 +111,35 @@ private:
 	// Update the error scores for all available instances
 	bool UpdateErrorScores();
 
-	// Formic: EKF2 is instance 0 and flies Altitude mode, formic_vio_est is instance 1 and
-	// flies Position mode. A role policy picks the primary from formic_pos_req.use_vision_now; each
-	// instance is published through an anchor (a rotation about down and a shift) that keeps the
-	// published frame: one frame per VIO segment.
+	// Formic: EKF2 is instance 0 (IMU, baro, mag, GPS; no vision) and formic_vio_est is instance 1
+	// (IMU, VIO; no GPS). EKF2 flies the modes without position. In a mode that needs position
+	// (formic_pos_req.use_vision_now) the source arbiter picks the VIO instance or EKF2 on GPS, from GPS
+	// quality, VIO health, FORMIC_EST_PREF and the RC source switch. Each instance is published through an
+	// anchor (a rotation about down and a shift) that keeps the published frame.
+	//
+	// Without GPS the published frame is one frame per VIO segment. From the first time GPS is ready
+	// (GPS good and EKF2's heading aligned) the published frame is EKF2's north with a fixed origin:
+	// EKF2's anchor has no rotation, and the VIO instance is anchored onto it at every switch.
 	static constexpr uint8_t FORMIC_EKF_INSTANCE{0};
 	static constexpr uint8_t FORMIC_VIO_INSTANCE{1};
 
 	void FormicRun();
+
+	/// Runs the source arbiter on this cycle's status.
+	formic_frames::ArbiterOutput FormicArbitrate(hrt_abstime now, const formic_pos_req_s &pos_req, bool vio_can_enter,
+			bool vio_can_stay, bool vio_healthy);
+
+	/**
+	 * The frame rules with GPS. At the first GPS ready: north becomes EKF2's and EKF2's anchor is
+	 * fitted to the published position, which does not step. After it: EKF2's heading resets are
+	 * followed also while the VIO instance is published.
+	 */
+	void FormicUpdateFrame(bool gps_ready);
+
+	/// Turns the published frame by `delta` about the vehicle's position, announced as resets. false: not possible now.
+	bool FormicRotatePublished(float delta);
+
+	void FormicPublishSourceStatus(hrt_abstime now, const formic_frames::ArbiterOutput &arb, uint8_t rc_position);
 
 	/// Asks EKF2 to take the published horizontal velocity before the switch to it. false: not possible now.
 	bool FormicRequestVelocitySeed();
@@ -284,6 +309,20 @@ private:
 	float _formic_unaided_offset{0.f};                 ///< added to the primary's anchored unaided heading, rad
 	bool _formic_backstop_warned{false};
 
+	// source arbiter and the GPS frame
+	formic_frames::SourceArbiter _formic_arbiter{};
+	formic_frames::ArbiterOutput _formic_arb{};       ///< this cycle's answer
+	bool _formic_gps_ready{false};                    ///< GPS good and EKF2's heading aligned
+	bool _formic_ekf_gnss{false};                     ///< EKF2 fuses GPS: no velocity seed from the VIO
+	bool _formic_origin_fitted{false};                ///< north is EKF2's and its anchor shift is fixed
+	uint8_t _formic_ekf_heading_counter{0};           ///< EKF2's own heading resets, followed while the VIO is published
+	hrt_abstime _formic_frame_change{0};              ///< the published frame was turned: no handover right after
+	hrt_abstime _formic_ref_change{0};                ///< EKF2's anchor shift changed: the published origin moved
+	hrt_abstime _formic_source_status_last{0};
+	formic_source_status_s _formic_source_status_prev{};
+	float _formic_gps_speed{NAN};
+	float _formic_vio_speed{NAN};
+
 	bool _formic_seed_pending{false};
 	hrt_abstime _formic_seed_deadline{0};
 	uint8_t _formic_seed_vxy_counter{0};
@@ -307,6 +346,12 @@ private:
 
 	uORB::Subscription _formic_pos_req_sub{ORB_ID(formic_pos_req)};
 	uORB::Subscription _formic_vio_est_status_sub{ORB_ID(formic_vio_est_status)};
+	uORB::Subscription _vehicle_gps_position_sub{ORB_ID(vehicle_gps_position)};
+	uORB::Subscription _formic_ekf_flags_sub{ORB_ID(estimator_status_flags), FORMIC_EKF_INSTANCE};
+	// read without taking the update away from the publishers above
+	uORB::Subscription _formic_lpos_sub[2] {{ORB_ID(estimator_local_position), 0}, {ORB_ID(estimator_local_position), 1}};
+	uORB::Subscription _formic_att_sub[2] {{ORB_ID(estimator_attitude), 0}, {ORB_ID(estimator_attitude), 1}};
+	uORB::Publication<formic_source_status_s> _formic_source_status_pub{ORB_ID(formic_source_status)};
 	uORB::Publication<formic_ekf_vel_reset_s> _formic_ekf_vel_reset_pub{ORB_ID(formic_ekf_vel_reset)};
 	uORB::Publication<formic_control_state_s> _formic_control_state_pub{ORB_ID(formic_control_state)};
 
@@ -329,7 +374,14 @@ private:
 		(ParamFloat<px4::params::EKF2_SEL_IMU_ACC>) _param_ekf2_sel_imu_accel,
 		(ParamFloat<px4::params::EKF2_SEL_IMU_VEL>) _param_ekf2_sel_imu_velocity,
 		(ParamFloat<px4::params::FORMIC_HO_TAU>) _param_formic_ho_tau,
-		(ParamInt<px4::params::FORMIC_HO_VSEED>) _param_formic_ho_vseed
+		(ParamInt<px4::params::FORMIC_HO_VSEED>) _param_formic_ho_vseed,
+		(ParamInt<px4::params::FORMIC_EST_PREF>) _param_formic_est_pref,
+		(ParamInt<px4::params::FORMIC_GPS_SAT>) _param_formic_gps_sat,
+		(ParamFloat<px4::params::FORMIC_GPS_HDOP>) _param_formic_gps_hdop,
+		(ParamFloat<px4::params::FORMIC_GPS_EPH>) _param_formic_gps_eph,
+		(ParamFloat<px4::params::FORMIC_GPS_TGOOD>) _param_formic_gps_tgood,
+		(ParamFloat<px4::params::FORMIC_GPS_TBAD>) _param_formic_gps_tbad,
+		(ParamFloat<px4::params::FORMIC_RET_DELAY>) _param_formic_ret_delay
 	)
 };
 #endif // !EKF2SELECTOR_HPP

@@ -527,7 +527,12 @@ void MspOsd::Run()
 			const bool in_position = formic_frames::mode_needs_position(failsafe_flags, vehicle_status.nav_state,
 						 offboard, hrt_absolute_time());
 
-			const auto msg = msp_osd::construct_rendor_FORMIC_VIO_STATUS(vio, in_position, pos_req);
+			// the position source picked by the EKF2 selector's arbiter
+			formic_source_status_s source{};
+			const bool source_fresh = _formic_source_status_sub.copy(&source)
+						  && (hrt_absolute_time() < source.timestamp + 1_s);
+
+			const auto msg = msp_osd::construct_rendor_FORMIC_VIO_STATUS(vio, in_position, pos_req, source, source_fresh);
 			this->Send(MSP_CMD_DISPLAYPORT, &msg, sizeof(msp_rendor_formicc_vio_status_t));
 		}
 	}

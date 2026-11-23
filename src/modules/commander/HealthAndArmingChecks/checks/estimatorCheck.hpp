@@ -46,6 +46,7 @@
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/sensor_gps.h>
 #include <uORB/topics/formic_vio_est_status.h>
+#include <uORB/topics/formic_source_status.h>
 
 #include <lib/hysteresis/hysteresis.h>
 
@@ -87,6 +88,7 @@ private:
 
 	uORB::Subscription _estimator_selector_status_sub{ORB_ID(estimator_selector_status)};
 	uORB::Subscription _formic_vio_est_status_sub{ORB_ID(formic_vio_est_status)};
+	uORB::Subscription _formic_source_status_sub{ORB_ID(formic_source_status)};
 	uORB::Subscription _estimator_status_sub{ORB_ID(estimator_status)};
 	uORB::Subscription _estimator_status_flags_sub{ORB_ID(estimator_status_flags)};
 	uORB::Subscription _estimator_sensor_bias_sub{ORB_ID(estimator_sensor_bias)};

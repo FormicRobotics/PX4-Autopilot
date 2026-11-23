@@ -33,6 +33,8 @@
 
 #include "EKF2Selector.hpp"
 
+#include <lib/geo/geo.h>
+
 using namespace time_literals;
 using matrix::Quatf;
 using matrix::Vector2f;
@@ -833,6 +835,14 @@ void EKF2Selector::PrintStatus()
 	}
 
 	PX4_INFO("instance %d anchor belongs to VIO segment %" PRIu32, FORMIC_VIO_INSTANCE, _formic_anchor_segment);
+
+	static const char *const source_name[] = {"none", "VIO", "GPS"};
+	static const char *const setting_name[] = {"Auto VIO first", "Auto GPS first", "VIO only", "GPS only"};
+	PX4_INFO("source %s (%s), GPS %s (fail mask 0x%x)%s, VIO %s%s", source_name[static_cast<uint8_t>(_formic_arb.source) % 3],
+		 setting_name[static_cast<uint8_t>(_formic_arb.setting) % 4], _formic_arb.gps_good ? "good" : "not good",
+		 _formic_arb.gps_fail, _formic_gps_ready ? ", ready" : "", _formic_arb.vio_good ? "good" : "not good",
+		 _formic_arb.vio_speed_blocked ? " (speed differs from GPS)" : "");
+	PX4_INFO("GPS frame: origin %s", _formic_origin_fitted ? "fitted" : "not fitted");
 }
 
 void EKF2Selector::FormicRun()
@@ -860,26 +870,53 @@ void EKF2Selector::FormicRun()
 				   && _instance[FORMIC_VIO_INSTANCE].healthy.get_state();
 	const bool vio_can_stay = vio_available && vio_fresh && !vio.gap_exceeded
 				  && !_instance[FORMIC_VIO_INSTANCE].timeout;
-	const bool want_vio = (_formic_override != INVALID_INSTANCE) ? (_formic_override == FORMIC_VIO_INSTANCE)
-			      : pos_req.use_vision_now;
+
+	// the source arbiter runs every cycle, also in a mode without position: commander reads its answer
+	// before it enters a mode that needs position
+	_formic_arb = FormicArbitrate(now, pos_req, vio_can_enter, vio_can_stay, vio_fresh && vio.healthy);
+	const formic_frames::Source source = _formic_arb.source;
+
+	FormicUpdateFrame(_formic_gps_ready);
 
 	uint8_t role = FORMIC_EKF_INSTANCE;
 
-	if (_selected_instance == FORMIC_VIO_INSTANCE) {
-		role = (want_vio && vio_can_stay) ? FORMIC_VIO_INSTANCE : FORMIC_EKF_INSTANCE;
+	if (_formic_override != INVALID_INSTANCE) {
+		// bench: the instance asked for, as far as it can fly
+		const bool want_vio = (_formic_override == FORMIC_VIO_INSTANCE);
 
-		// backstop: the VIO instance cannot carry on and commander has not left Position mode yet
-		if (want_vio && !vio_can_stay) {
-			if (!_formic_backstop_warned) {
-				PX4_WARN("VIO instance failed (gap over FORMIC_VIO_GAP): switching to EKF2");
-				_formic_backstop_warned = true;
+		if (_selected_instance == FORMIC_VIO_INSTANCE) {
+			role = (want_vio && vio_can_stay) ? FORMIC_VIO_INSTANCE : FORMIC_EKF_INSTANCE;
+
+			if (want_vio && !vio_can_stay) {
+				_formic_override = INVALID_INSTANCE;
 			}
 
-			_formic_override = INVALID_INSTANCE;
+		} else {
+			role = (want_vio && vio_can_enter) ? FORMIC_VIO_INSTANCE : FORMIC_EKF_INSTANCE;
 		}
 
-	} else {
-		role = (want_vio && vio_can_enter) ? FORMIC_VIO_INSTANCE : FORMIC_EKF_INSTANCE;
+	} else if (pos_req.use_vision_now) {
+		if (source == formic_frames::Source::VIO) {
+			role = FORMIC_VIO_INSTANCE;
+
+		} else if ((source == formic_frames::Source::NONE) && (_selected_instance == FORMIC_VIO_INSTANCE)) {
+			// no source is good: the VIO instance carries on with the IMU until commander has left the mode
+			if (vio_can_stay) {
+				role = FORMIC_VIO_INSTANCE;
+
+			} else if (!_formic_backstop_warned) {
+				// backstop: it cannot carry on and commander has not left Position mode yet
+				PX4_WARN("VIO instance failed (gap over FORMIC_VIO_GAP), GPS not good: switching to EKF2");
+				_formic_backstop_warned = true;
+			}
+		}
+
+		// source GPS: EKF2. A lost VIO with good GPS is a normal switch.
+	}
+
+	// the published frame was just turned: a handover waits until the published history is in the new frame
+	if ((role != _selected_instance) && (now < _formic_frame_change + 50_ms)) {
+		role = _selected_instance;
 	}
 
 	if (role != _formic_role) {
@@ -898,8 +935,9 @@ void EKF2Selector::FormicRun()
 	} else if (role == FORMIC_EKF_INSTANCE) {
 		// a handover because the VIO failed steps the tilt: ramping away from bad data only makes it last longer
 		const bool requested = vio_fresh && vio.healthy;
+		// EKF2 with GPS has its own velocity: nothing from the VIO goes into it
 		const bool seed = (_param_formic_ho_vseed.get() != 0) && vio_fresh && vio.vel_trusted
-				  && !_instance[FORMIC_EKF_INSTANCE].timeout;
+				  && !_instance[FORMIC_EKF_INSTANCE].timeout && !_formic_ekf_gnss;
 		bool switch_now = true;
 
 		if (seed) {
@@ -935,6 +973,8 @@ void EKF2Selector::FormicRun()
 		FormicHandover(FORMIC_VIO_INSTANCE, true, vio.segment);
 	}
 
+	FormicPublishSourceStatus(now, _formic_arb, pos_req.src_rc);
+
 	// the selector status carries the anchors: logs and the Jetson convert between the frames with it
 	if (_selector_status_publish || (now > _last_status_publish + 100_ms) || _accel_fault_detected
 	    || _gyro_fault_detected) {
@@ -947,6 +987,212 @@ void EKF2Selector::FormicRun()
 	PublishVehicleGlobalPosition();
 	FormicPublishVehicleOdometry();
 	PublishWindEstimate();
+}
+
+formic_frames::ArbiterOutput EKF2Selector::FormicArbitrate(hrt_abstime now, const formic_pos_req_s &pos_req,
+		bool vio_can_enter, bool vio_can_stay, bool vio_healthy)
+{
+	formic_frames::ArbiterInput in;
+	in.now_us = now;
+
+	// the GPS EKF2 fuses
+	sensor_gps_s gps;
+
+	if (_vehicle_gps_position_sub.copy(&gps) && (now < gps.timestamp + 1_s)) {
+		in.gps.fresh = true;
+		in.gps.fix_type = gps.fix_type;
+		in.gps.satellites = gps.satellites_used;
+		in.gps.hdop = gps.hdop;
+		in.gps.eph = gps.eph;
+		in.gps.speed_acc = gps.s_variance_m_s;
+		in.gps.jammed = (gps.jamming_state == sensor_gps_s::JAMMING_STATE_CRITICAL);
+		in.gps.spoofed = (gps.spoofing_state == sensor_gps_s::SPOOFING_STATE_INDICATED)
+				 || (gps.spoofing_state == sensor_gps_s::SPOOFING_STATE_MULTIPLE);
+	}
+
+	// EKF2 publishes its flags on a change and once a second
+	estimator_status_flags_s flags;
+	const bool flags_fresh = _formic_ekf_flags_sub.copy(&flags) && (now < flags.timestamp + 3_s);
+	_formic_ekf_gnss = flags_fresh && (flags.cs_gnss_pos || flags.cs_gnss_vel);
+
+	vehicle_local_position_s lpos0;
+	const bool lpos0_fresh = _formic_lpos_sub[FORMIC_EKF_INSTANCE].copy(&lpos0) && (now < lpos0.timestamp + 200_ms);
+	in.gps.ekf_fusing = flags_fresh && flags.cs_gnss_pos;
+	in.gps.ekf_xy_valid = lpos0_fresh && lpos0.xy_valid && lpos0.v_xy_valid;
+
+	// the VIO stays the source while it is healthy; without GPS it carries on with the IMU for FORMIC_VIO_GAP (FormicRun)
+	in.vio_enter = vio_can_enter;
+	in.vio_stay = vio_can_stay && vio_healthy;
+
+	vehicle_local_position_s lpos1;
+	const bool lpos1_fresh = (_available_instances > FORMIC_VIO_INSTANCE)
+				 && _formic_lpos_sub[FORMIC_VIO_INSTANCE].copy(&lpos1) && (now < lpos1.timestamp + 200_ms);
+
+	_formic_gps_speed = (lpos0_fresh && lpos0.v_xy_valid) ? Vector2f(lpos0.vx, lpos0.vy).norm() : NAN;
+	_formic_vio_speed = (lpos1_fresh && lpos1.v_xy_valid && vio_healthy) ? Vector2f(lpos1.vx, lpos1.vy).norm() : NAN;
+	in.speeds_valid = PX4_ISFINITE(_formic_gps_speed) && PX4_ISFINITE(_formic_vio_speed);
+	in.gps_speed = in.speeds_valid ? _formic_gps_speed : 0.f;
+	in.vio_speed = in.speeds_valid ? _formic_vio_speed : 0.f;
+
+	const int32_t pref = _param_formic_est_pref.get();
+	in.pref = (pref >= 0 && pref <= 3) ? static_cast<formic_frames::SourcePref>(pref)
+		  : formic_frames::SourcePref::AUTO_VIO_FIRST;
+	in.rc = (pos_req.src_rc <= formic_pos_req_s::SRC_RC_GPS) ? static_cast<formic_frames::SourceRc>(pos_req.src_rc)
+		: formic_frames::SourceRc::NONE;
+
+	formic_frames::ArbiterLimits &lim = _formic_arbiter.limits;
+	lim.sat_min = static_cast<uint8_t>(constrain(_param_formic_gps_sat.get(), static_cast<int32_t>(0),
+					   static_cast<int32_t>(255)));
+	lim.hdop_max = _param_formic_gps_hdop.get();
+	lim.eph_max = _param_formic_gps_eph.get();
+	lim.t_good_us = static_cast<uint64_t>(math::max(_param_formic_gps_tgood.get(), 0.f) * 1e6f);
+	lim.t_bad_us = static_cast<uint64_t>(math::max(_param_formic_gps_tbad.get(), 0.f) * 1e6f);
+	lim.dwell_us = static_cast<uint64_t>(math::max(_param_formic_ret_delay.get(), 0.f) * 1e6f);
+
+	const formic_frames::ArbiterOutput out = _formic_arbiter.update(in);
+
+	// "GPS ready": good, and EKF2 knows north. The speed check does not count: it is about the VIO too.
+	const bool gps_quality = out.gps_good || (out.gps_fail == formic_frames::gps_fail::SPEED);
+	_formic_gps_ready = gps_quality && flags_fresh && flags.cs_yaw_align;
+
+	return out;
+}
+
+void EKF2Selector::FormicUpdateFrame(bool gps_ready)
+{
+	vehicle_local_position_s lpos0;
+	vehicle_attitude_s att0;
+
+	if (!_formic_lpos_sub[FORMIC_EKF_INSTANCE].copy(&lpos0) || !_formic_att_sub[FORMIC_EKF_INSTANCE].copy(&att0)) {
+		return;
+	}
+
+	if (_formic_origin_fitted) {
+		// EKF2 corrected north: the VIO instance's output turns with it. Published EKF2 announces it itself.
+		if (lpos0.heading_reset_counter != _formic_ekf_heading_counter) {
+			_formic_ekf_heading_counter = lpos0.heading_reset_counter;
+
+			if ((_selected_instance == FORMIC_VIO_INSTANCE) && PX4_ISFINITE(lpos0.delta_heading)
+			    && FormicRotatePublished(lpos0.delta_heading)) {
+				PX4_INFO("EKF2 heading reset %.1f deg followed on the VIO instance", (double)math::degrees(lpos0.delta_heading));
+			}
+		}
+
+		return;
+	}
+
+	if (!gps_ready) {
+		return;
+	}
+
+	// The first GPS ready. North becomes EKF2's: the published heading turns onto it, about the vehicle's
+	// position, so the published position does not step.
+	formic_frames::PoseSample pub_att;
+	formic_frames::PoseSample pub_lpos;
+
+	if (!_formic_att_history.sampleAt(att0.timestamp_sample, pub_att)
+	    || !_formic_lpos_history.sampleAt(lpos0.timestamp_sample, pub_lpos)) {
+		return;
+	}
+
+	const float delta = matrix::wrap_pi(formic_frames::yaw_of(Quatf(att0.q)) - formic_frames::yaw_of(pub_att.q));
+
+	if ((fabsf(delta) > 1e-4f) && !FormicRotatePublished(delta)) {
+		return;
+	}
+
+	// EKF2's anchor: no rotation, and the shift that makes its output continue the published position.
+	// The published origin is EKF2's origin moved by this shift.
+	formic_frames::Anchor &anchor = _formic_anchor[FORMIC_EKF_INSTANCE];
+	anchor.psi = 0.f;
+	anchor.t = pub_lpos.p - Vector3f(lpos0.x, lpos0.y, lpos0.z);
+
+	if (_selected_instance == FORMIC_EKF_INSTANCE && anchor.t.norm() < 1e-3f) {
+		anchor.t.zero();
+	}
+
+	_formic_anchor_valid[FORMIC_EKF_INSTANCE] = true;
+	_formic_ekf_heading_counter = lpos0.heading_reset_counter;
+	_formic_origin_fitted = true;
+	_formic_ref_change = hrt_absolute_time();
+	_selector_status_publish = true;
+
+	PX4_INFO("GPS ready: origin fitted, published on instance %" PRIu8 ", heading %.1f deg, shift %.2f %.2f %.2f m",
+		 _selected_instance, (double)math::degrees(delta), (double)anchor.t(0), (double)anchor.t(1), (double)anchor.t(2));
+}
+
+bool EKF2Selector::FormicRotatePublished(float delta)
+{
+	vehicle_local_position_s lpos;
+
+	if ((_selected_instance > FORMIC_VIO_INSTANCE) || !_formic_lpos_sub[_selected_instance].copy(&lpos)) {
+		return false;
+	}
+
+	formic_frames::Anchor &anchor = _formic_anchor[_selected_instance];
+	const Vector3f p_inst(lpos.x, lpos.y, lpos.z);
+	const Vector3f v_inst(lpos.vx, lpos.vy, lpos.vz);
+	const Vector3f p_pub = anchor.applyPosition(p_inst);
+	const Vector3f v_before = anchor.applyVector(v_inst);
+
+	// the same published position with the new heading
+	anchor.psi = matrix::wrap_pi(anchor.psi + delta);
+	anchor.t = p_pub - matrix::Dcmf(anchor.rotation()) * p_inst;
+
+	const Vector3f v_after = anchor.applyVector(v_inst);
+	const Quatf dq = formic_frames::rotation_about_down(delta);
+
+	_delta_heading_reset = delta;
+	++_heading_reset_counter;
+	_delta_q_reset = dq;
+	++_quat_reset_counter;
+	_delta_vxy_reset = Vector2f(v_after(0) - v_before(0), v_after(1) - v_before(1));
+	++_vxy_reset_counter;
+	++_odometry_reset_counter;
+
+	// the tilt still to be ramped out is in the published frame
+	_formic_ramp_dtheta = matrix::Dcmf(dq) * _formic_ramp_dtheta;
+
+	if (_selected_instance == FORMIC_EKF_INSTANCE) {
+		_formic_ref_change = hrt_absolute_time();
+	}
+
+	_formic_frame_change = hrt_absolute_time();
+	_selector_status_publish = true;
+	return true;
+}
+
+void EKF2Selector::FormicPublishSourceStatus(hrt_abstime now, const formic_frames::ArbiterOutput &arb,
+		uint8_t rc_position)
+{
+	formic_source_status_s status{};
+	status.source = static_cast<uint8_t>(arb.source);
+	status.source_active = ((arb.source == formic_frames::Source::VIO) && (_selected_instance == FORMIC_VIO_INSTANCE))
+			       || ((arb.source == formic_frames::Source::GPS) && (_selected_instance == FORMIC_EKF_INSTANCE));
+	status.gps_good = arb.gps_good;
+	status.vio_good = arb.vio_good;
+	status.vio_speed_blocked = arb.vio_speed_blocked;
+	status.gps_fail = arb.gps_fail;
+	status.setting = static_cast<uint8_t>(arb.setting);
+	status.rc_position = rc_position;
+	status.gps_ready = _formic_gps_ready;
+	status.origin_fitted = _formic_origin_fitted;
+	status.gps_speed = _formic_gps_speed;
+	status.vio_speed = _formic_vio_speed;
+
+	const formic_source_status_s &prev = _formic_source_status_prev;
+	const bool changed = (status.source != prev.source) || (status.source_active != prev.source_active)
+			     || (status.gps_good != prev.gps_good) || (status.vio_good != prev.vio_good)
+			     || (status.gps_fail != prev.gps_fail) || (status.setting != prev.setting)
+			     || (status.rc_position != prev.rc_position) || (status.gps_ready != prev.gps_ready)
+			     || (status.origin_fitted != prev.origin_fitted) || (status.vio_speed_blocked != prev.vio_speed_blocked);
+
+	if (changed || (now >= _formic_source_status_last + 100_ms)) {
+		status.timestamp = hrt_absolute_time();
+		_formic_source_status_pub.publish(status);
+		_formic_source_status_prev = status;
+		_formic_source_status_last = now;
+	}
 }
 
 bool EKF2Selector::FormicRequestVelocitySeed()
@@ -1007,15 +1253,30 @@ void EKF2Selector::FormicHandover(uint8_t new_instance, bool requested, uint32_t
 
 	formic_frames::Anchor anchor = _formic_anchor[new_instance];
 	bool snap_back = false;
+	const bool to_gps_frame = have_pub && (new_instance == FORMIC_EKF_INSTANCE) && _formic_origin_fitted;
 
 	if (!have_pub) {
 		if (!_formic_anchor_valid[new_instance]) {
 			anchor = formic_frames::Anchor{};
 		}
 
-	} else if ((new_instance == FORMIC_VIO_INSTANCE) && _formic_anchor_valid[FORMIC_VIO_INSTANCE]
-		   && (vio_segment == _formic_anchor_segment)) {
-		// same VIO segment: back to its frame, stepping out EKF2's drift since the last switch
+	} else if (to_gps_frame) {
+		// with GPS the published frame is EKF2's: north from EKF2 and its fixed shift, so the VIO's drift
+		// since the last switch steps out, announced as resets. Height carries on. Without good GPS EKF2's
+		// horizontal position is not worth a step: it carries on too, and the published origin moves with it.
+		anchor.psi = 0.f;
+		anchor.t(2) = pub_lpos.p(2) - p_inst(2);
+
+		if (!_formic_arb.gps_good) {
+			anchor.t(0) = pub_lpos.p(0) - p_inst(0);
+			anchor.t(1) = pub_lpos.p(1) - p_inst(1);
+		}
+
+		snap_back = true;
+
+	} else if ((new_instance == FORMIC_VIO_INSTANCE) && !_formic_origin_fitted
+		   && _formic_anchor_valid[FORMIC_VIO_INSTANCE] && (vio_segment == _formic_anchor_segment)) {
+		// without GPS, same VIO segment: back to its frame, stepping out EKF2's drift since the last switch
 		snap_back = true;
 
 	} else {
@@ -1040,6 +1301,9 @@ void EKF2Selector::FormicHandover(uint8_t new_instance, bool requested, uint32_t
 
 	if (new_instance == FORMIC_VIO_INSTANCE) {
 		_formic_anchor_segment = vio_segment;
+
+	} else {
+		_formic_ref_change = hrt_absolute_time();
 	}
 
 	formic_frames::Step step{};
@@ -1097,13 +1361,14 @@ void EKF2Selector::FormicHandover(uint8_t new_instance, bool requested, uint32_t
 	_selector_status_publish = true;
 
 	PX4_INFO("handover %" PRIu8 " -> %" PRIu8 " (%s): velocity step %.2f %.2f %.2f m/s, tilt %.2f deg %s%s",
-		 old_instance, new_instance, requested ? "requested" : "VIO failed",
+		 old_instance, new_instance, requested ? "requested" : "VIO lost",
 		 (double)step.delta_v(0), (double)step.delta_v(1), (double)step.delta_v(2),
 		 (double)math::degrees(d_theta.norm()), ramp ? "ramped" : "stepped",
-		 snap_back ? ", back to the VIO segment frame" : "");
+		 !snap_back ? "" : (to_gps_frame ? ", onto the GPS frame" : ", back to the VIO segment frame"));
 
 	if (snap_back) {
-		PX4_INFO("snap back: %.2f %.2f %.2f m, heading %.1f deg", (double)step.delta_p(0), (double)step.delta_p(1),
+		PX4_INFO("%s: %.2f %.2f %.2f m, heading %.1f deg", to_gps_frame ? "position step" : "snap back",
+			 (double)step.delta_p(0), (double)step.delta_p(1),
 			 (double)step.delta_p(2), (double)math::degrees(step.delta_heading));
 	}
 }
@@ -1248,6 +1513,20 @@ void EKF2Selector::FormicPublishVehicleLocalPosition()
 	lpos.az = a(2);
 	lpos.heading = anchor.applyHeading(lpos.heading);
 	lpos.unaided_heading = matrix::wrap_pi(anchor.applyHeading(lpos.unaided_heading) + _formic_unaided_offset);
+
+	// the published origin is EKF2's origin moved by its anchor shift: published 0 is at EKF2's -shift
+	if ((_selected_instance == FORMIC_EKF_INSTANCE) && _formic_origin_fitted && (anchor.t.norm() > 1e-3f)) {
+		if (lpos.xy_global && PX4_ISFINITE(lpos.ref_lat) && PX4_ISFINITE(lpos.ref_lon)) {
+			const MapProjection ekf_origin(lpos.ref_lat, lpos.ref_lon);
+			ekf_origin.reproject(-anchor.t(0), -anchor.t(1), lpos.ref_lat, lpos.ref_lon);
+		}
+
+		if (lpos.z_global && PX4_ISFINITE(lpos.ref_alt)) {
+			lpos.ref_alt += anchor.t(2);
+		}
+
+		lpos.ref_timestamp = math::max(lpos.ref_timestamp, _formic_ref_change);
+	}
 
 	lpos.xy_reset_counter = _xy_reset_counter;
 	lpos.z_reset_counter = _z_reset_counter;

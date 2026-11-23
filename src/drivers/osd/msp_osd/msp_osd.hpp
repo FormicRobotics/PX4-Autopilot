@@ -60,6 +60,7 @@
 #include <uORB/topics/vehicle_odometry.h> // TODO: switch to vehicle_visual_odometry when available
 #include <uORB/topics/formic_vio_est_status.h>
 #include <uORB/topics/formic_pos_req.h>
+#include <uORB/topics/formic_source_status.h>
 #include <uORB/topics/failsafe_flags.h>
 #include <uORB/topics/offboard_control_mode.h>
 #include <lib/formic_frames/position_need.hpp>
@@ -187,6 +188,7 @@ private:
 	uORB::Subscription _vehicle_vision_odometry_sub{ORB_ID(vehicle_visual_odometry)}; // TODO: switch to vehicle_visual_odometry when available
 	uORB::Subscription _formic_vio_est_status_sub{ORB_ID(formic_vio_est_status)};
 	uORB::Subscription _formic_pos_req_sub{ORB_ID(formic_pos_req)};
+	uORB::Subscription _formic_source_status_sub{ORB_ID(formic_source_status)};
 	uORB::Subscription _failsafe_flags_sub{ORB_ID(failsafe_flags)};
 	uORB::Subscription _offboard_control_mode_sub{ORB_ID(offboard_control_mode)};
 

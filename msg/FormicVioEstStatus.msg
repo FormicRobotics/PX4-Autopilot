@@ -5,7 +5,7 @@ uint64 timestamp_sample			# sample time of the newest accepted VIO pose, PX4 clo
 
 bool initialised			# the output has been started from a VIO pose
 bool healthy				# newest pose younger than FORMIC_VIO_TOUT, VIO status NOMINAL or DEGRADED, clock locked
-bool pos_offerable			# healthy and VIO status NOMINAL: Position mode may be entered on this instance
+bool pos_offerable			# healthy, VIO status NOMINAL, and the segment has been NOMINAL for FORMIC_VIO_TSET: this instance may be switched to
 bool gap_exceeded			# no pose accepted for FORMIC_VIO_GAP_MAX: the instance must not fly
 bool vel_trusted			# the velocity may seed EKF2 at a handover: not gap_exceeded and VIO status not DIVERGED
 bool clock_locked			# the newest pose carried a usable sender age

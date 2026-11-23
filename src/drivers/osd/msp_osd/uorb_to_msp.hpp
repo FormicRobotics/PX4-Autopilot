@@ -63,7 +63,8 @@
 #include <uORB/topics/total_arm_time.h>
 #include <uORB/topics/dds_flag.h>
 #include <uORB/topics/formic_vio_est_status.h>
-#include <uORB/topics/formic_pos_req.h>			
+#include <uORB/topics/formic_pos_req.h>
+#include <uORB/topics/formic_source_status.h>
 // PX4 events interface
 #include <px4_platform_common/events.h>
 
@@ -154,9 +155,14 @@ msp_rendor_formic_ring_t construct_rendor_FORMIC_RING(const dds_flag_s &dds_flag
 
 msp_rendor_formic_crosshairs_t construct_rendor_FORMIC_CROSSHAIRS(int osd_format);
 
-// POS, POS-DEG, WAIT or DEGRAD from the VIO instance, the mode and the position request.
+// The position source and the mode: POS VIO, VIO DEG or POS GPS in a mode that needs position; while one is
+// wanted and not flown, the GPS check that fails (GPS:SAT ...) or WAIT; DEGRAD otherwise when the VIO is degraded.
 // in_position: the mode flown needs position (formic_frames::mode_needs_position)
+// source_fresh: `source` is the selector's newest status; false gives the labels without a source
 msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_vio_est_status_s &vio,
-		bool in_position, const formic_pos_req_s &pos_req);
+		bool in_position, const formic_pos_req_s &pos_req, const formic_source_status_s &source, bool source_fresh);
+
+// Three letters for the first GPS check that fails in a formic_source_status.gps_fail mask. "" for 0.
+const char *formic_gps_fail_label(uint16_t gps_fail);
 
 } // namespace msp_osd

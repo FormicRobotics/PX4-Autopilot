@@ -448,7 +448,30 @@ void FormicVioEst::updateHealth(hrt_abstime now)
 
 	_healthy = initialised && (age_us < tout_us) && status_usable(_vio_status) && _clock_locked
 		   && (now - _last_rx_us < tout_us);
-	_pos_offerable = _healthy && (_vio_status == formic_vio_est_status_s::VIO_STATUS_NOMINAL);
+	const bool nominal = _healthy && (_vio_status == formic_vio_est_status_s::VIO_STATUS_NOMINAL);
+
+	// a new segment has its own frame: it is offered only after it has been NOMINAL for FORMIC_VIO_TSET
+	if (_segment.id() != _settle_segment) {
+		_settle_segment = _segment.id();
+		_segment_settled = false;
+		_nominal_since_us = 0;
+	}
+
+	if (!_segment_settled) {
+		if (!nominal) {
+			_nominal_since_us = 0;
+
+		} else {
+			if (_nominal_since_us == 0) {
+				_nominal_since_us = now;
+			}
+
+			const uint64_t settle_us = static_cast<uint64_t>(math::max(_param_formic_vio_tset.get(), 0.f) * 1e6f);
+			_segment_settled = (now - _nominal_since_us >= settle_us);
+		}
+	}
+
+	_pos_offerable = nominal && _segment_settled;
 	_gap_exceeded = !initialised || (age_us > gap_us);
 	_vel_trusted = !_gap_exceeded && (_vio_status != formic_vio_est_status_s::VIO_STATUS_DIVERGED);
 

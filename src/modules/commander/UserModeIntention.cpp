@@ -45,6 +45,7 @@ UserModeIntention::UserModeIntention(const vehicle_status_s &vehicle_status,
 	  _handler(handler)
 {
 	_param_formic_ret_delay = param_find("FORMIC_RET_DELAY");
+	_param_formic_src_rc = param_find("FORMIC_SRC_RC");
 	_param_com_of_loss_t = param_find("COM_OF_LOSS_T");
 }
 
@@ -75,9 +76,9 @@ bool UserModeIntention::change(uint8_t user_intended_nav_state, ModeChangeSource
 		}
 
 		///////add by naor ////////////////
-		// canRun() alone is not enough for a position mode: after the EV feed is cut, EKF2 keeps
-		// reporting a valid position until EKF2_NOAID_TOUT expires. Require the same EV convergence
-		// gate that tick() uses, so a direct switch can't enter position mode on a stale estimate.
+		// canRun() alone is not enough for a position mode: the selector must already publish the position
+		// source its arbiter picked (the VIO instance or EKF2 on GPS). The same gate as in tick(), so a direct
+		// switch can't enter a position mode on an estimate that is not that source.
 		if (allow_change && modeRequiresPosition(user_intended_nav_state) && !evReadyForPosition()) {
 			allow_change = false;
 		}
@@ -210,9 +211,13 @@ void UserModeIntention::updateVisionRole()
 {
 	const hrt_abstime now = hrt_absolute_time();
 
-	formic_vio_est_status_s vio{};
-	const bool vio_fresh = _formic_vio_est_status_sub.copy(&vio) && (now < vio.timestamp + 200_ms);
-	const bool offerable = vio_fresh && vio.pos_offerable;
+	// a position source is good: the selector's arbiter decides which one
+	formic_source_status_s source{};
+	const bool offerable = sourceStatus(source) && (source.source != formic_source_status_s::SOURCE_NONE);
+
+	const uint8_t src_rc = readSourceSwitch();
+	const bool src_rc_changed = (src_rc != _src_rc);
+	_src_rc = src_rc;
 
 	if (!offerable) {
 		_vio_offerable_since_us = 0;
@@ -233,7 +238,7 @@ void UserModeIntention::updateVisionRole()
 	const bool intention_pos = modeRequiresPosition(_user_intented_nav_state);
 	const bool wanted = intention_pos || (_pending_nav_state != UINT8_MAX && modeRequiresPosition(_pending_nav_state));
 
-	// after a failsafe dropped Position mode, return only once the VIO has been offerable for FORMIC_RET_DELAY
+	// after a failsafe dropped Position mode, return only once a source has been good for FORMIC_RET_DELAY
 	const bool returning = isArmed() && intention_pos && !nav_pos;
 	float ret_delay_s = 3.f;
 
@@ -246,22 +251,62 @@ void UserModeIntention::updateVisionRole()
 
 	const bool use_vision_now = nav_pos || mode_change_settling || (wanted && offerable && ret_ok);
 
-	if (use_vision_now != _use_vision_now) {
+	if ((use_vision_now != _use_vision_now) || src_rc_changed) {
 		_use_vision_now = use_vision_now;
 		publish_formic_pos_req(_pos_req_last);
 	}
 }
 
+bool UserModeIntention::sourceStatus(formic_source_status_s &status)
+{
+	return _formic_source_status_sub.copy(&status) && (hrt_absolute_time() < status.timestamp + 500_ms);
+}
+
+uint8_t UserModeIntention::readSourceSwitch()
+{
+	int32_t channel = 0;
+
+	if (_param_formic_src_rc != PARAM_INVALID) {
+		param_get(_param_formic_src_rc, &channel);
+	}
+
+	manual_control_setpoint_s manual{};
+
+	if (channel < 1 || channel > 6 || !_manual_control_setpoint_sub.copy(&manual) || !manual.valid
+	    || (hrt_absolute_time() > manual.timestamp + 1_s)) {
+		// no switch, or no RC: FORMIC_EST_PREF decides
+		return formic_pos_req_s::SRC_RC_NONE;
+	}
+
+	const float aux[6] {manual.aux1, manual.aux2, manual.aux3, manual.aux4, manual.aux5, manual.aux6};
+	const float value = aux[channel - 1];
+
+	if (!PX4_ISFINITE(value)) {
+		return formic_pos_req_s::SRC_RC_NONE;
+	}
+
+	// three positions, with a band so that noise at a threshold does not toggle the source
+	const float low = (_src_rc == formic_pos_req_s::SRC_RC_VIO) ? -0.25f : -0.4f;
+	const float high = (_src_rc == formic_pos_req_s::SRC_RC_GPS) ? 0.25f : 0.4f;
+
+	if (value < low) {
+		return formic_pos_req_s::SRC_RC_VIO;
+	}
+
+	if (value > high) {
+		return formic_pos_req_s::SRC_RC_GPS;
+	}
+
+	return formic_pos_req_s::SRC_RC_AUTO;
+}
+
 bool UserModeIntention::evReadyForPosition()
 {
-	// Position mode flies on the VIO instance: it must be the primary already
-	estimator_selector_status_s selector{};
-	formic_vio_est_status_s vio{};
-	const hrt_abstime now = hrt_absolute_time();
+	// A position mode flies on the source the selector's arbiter picked, the VIO instance or EKF2 on GPS:
+	// that source must be good and the primary already
+	formic_source_status_s source{};
 
-	return _estimator_selector_status_sub.copy(&selector) && (now < selector.timestamp + 1_s)
-	       && (selector.primary_instance == 1)
-	       && _formic_vio_est_status_sub.copy(&vio) && (now < vio.timestamp + 200_ms) && vio.healthy;
+	return sourceStatus(source) && (source.source != formic_source_status_s::SOURCE_NONE) && source.source_active;
 }
 
 void UserModeIntention::publish_formic_pos_req(bool pos_requested)
@@ -269,6 +314,7 @@ void UserModeIntention::publish_formic_pos_req(bool pos_requested)
 	formic_pos_req_s pos_req{};
 	pos_req.pos_req = pos_requested;
 	pos_req.use_vision_now = _use_vision_now;
+	pos_req.src_rc = _src_rc;
 	pos_req.timestamp = hrt_absolute_time();
 	_pos_req_last = pos_requested;
 	_formic_pos_req_pub.publish(pos_req);

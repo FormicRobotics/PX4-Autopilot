@@ -283,6 +283,7 @@ set(msg_files
 	FormicEkfVelReset.msg
 	FormicImuBatch.msg
 	FormicPosReq.msg
+	FormicSourceStatus.msg
 	FormicVioEstStatus.msg
 )
 

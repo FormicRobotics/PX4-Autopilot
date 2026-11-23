@@ -758,23 +758,34 @@ void EstimatorChecks::setModeRequirementFlags(const Context &context, bool pre_f
 		!checkPosVelValidity(now, v_xy_valid, lpos.evh, _param_com_vel_fs_evh.get(), lpos.timestamp,
 				     _last_lvel_fail_time_us, !failsafe_flags.local_velocity_invalid);
 
-	// The VIO instance stays valid while the IMU carries it through a VIO gap, so
-	// Position mode keeps a valid state until the mode has changed. Fail over on its health instead.
+	// The estimators stay valid for a while after their source is lost: the VIO instance while the IMU
+	// carries it through a VIO gap, EKF2 while it dead-reckons after GPS. Fail over on the source arbiter of
+	// the EKF2 selector instead: position is invalid when it reports that no source is good. With good GPS a
+	// lost VIO is a switch of the source, and Position mode stays.
 	{
-		estimator_selector_status_s selector;
-		formic_vio_est_status_s vio;
+		formic_source_status_s source;
+		bool no_source = false;
 
-		if (_estimator_selector_status_sub.copy(&selector) && (selector.primary_instance == 1)) {
-			const bool vio_healthy = _formic_vio_est_status_sub.copy(&vio) && (now < vio.timestamp + 200_ms) && vio.healthy;
+		if (_formic_source_status_sub.copy(&source) && (now < source.timestamp + 500_ms)) {
+			no_source = (source.source == formic_source_status_s::SOURCE_NONE);
 
-			if (!vio_healthy) {
-				failsafe_flags.local_position_invalid = true;
-				failsafe_flags.local_position_invalid_relaxed = true;
-				failsafe_flags.local_velocity_invalid = true;
-				_last_lpos_fail_time_us = now;
-				_last_lpos_relaxed_fail_time_us = now;
-				_last_lvel_fail_time_us = now;
+		} else {
+			// no arbiter status: the VIO instance flies on its own health
+			estimator_selector_status_s selector;
+			formic_vio_est_status_s vio;
+
+			if (_estimator_selector_status_sub.copy(&selector) && (selector.primary_instance == 1)) {
+				no_source = !(_formic_vio_est_status_sub.copy(&vio) && (now < vio.timestamp + 200_ms) && vio.healthy);
 			}
+		}
+
+		if (no_source) {
+			failsafe_flags.local_position_invalid = true;
+			failsafe_flags.local_position_invalid_relaxed = true;
+			failsafe_flags.local_velocity_invalid = true;
+			_last_lpos_fail_time_us = now;
+			_last_lpos_relaxed_fail_time_us = now;
+			_last_lvel_fail_time_us = now;
 		}
 	}
 

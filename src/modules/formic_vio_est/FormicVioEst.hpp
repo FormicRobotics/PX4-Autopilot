@@ -153,6 +153,9 @@ private:
 	bool _vel_trusted{false};
 	bool _health_prev{false};
 	bool _offerable_prev{false};
+	uint32_t _settle_segment{0};           ///< the segment the settle time below belongs to
+	bool _segment_settled{false};          ///< the segment has been NOMINAL for FORMIC_VIO_TSET
+	hrt_abstime _nominal_since_us{0};      ///< 0: not NOMINAL now
 
 	// --- Resets of this instance ---
 	uint8_t _quat_reset_counter{0};
@@ -178,6 +181,7 @@ private:
 		(ParamInt<px4::params::FORMIC_VIO_DLY>) _param_formic_vio_dly,     // largest pose delay, ms
 		(ParamFloat<px4::params::FORMIC_VIO_TOUT>) _param_formic_vio_tout, // pose age at which the VIO is stale, s
 		(ParamFloat<px4::params::FORMIC_VIO_GAP>) _param_formic_vio_gap,   // longest IMU-only gap, s
+		(ParamFloat<px4::params::FORMIC_VIO_TSET>) _param_formic_vio_tset, // NOMINAL time before a new segment is offered, s
 		(ParamFloat<px4::params::FORMIC_VIO_TAU_A>) _param_formic_vio_tau_a,
 		(ParamFloat<px4::params::FORMIC_VIO_TAU_V>) _param_formic_vio_tau_v,
 		(ParamFloat<px4::params::FORMIC_VIO_TAU_P>) _param_formic_vio_tau_p,

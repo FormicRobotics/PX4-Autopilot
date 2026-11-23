@@ -71,6 +71,7 @@ void LoggedTopics::add_default_topics()
 	add_topic("formic_odom");
 	add_topic("formic_pos_req");
 	add_optional_topic("formic_vio_est_status", 50);
+	add_optional_topic("formic_source_status", 100);
 	add_optional_topic("formic_ekf_vel_reset");
 	add_optional_topic("formic_control_state", 20);
 	add_optional_topic("vehicle_visual_odometry", 30);

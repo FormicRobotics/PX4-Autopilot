@@ -2228,6 +2228,11 @@ void EKF2::UpdateFormicVelocityReset()
 		return;
 	}
 
+	// with GPS this EKF2 has its own velocity: nothing from the VIO goes into it
+	if (_ekf.control_status_flags().gnss_vel || _ekf.control_status_flags().gnss_pos) {
+		return;
+	}
+
 	const float vel_var = PX4_ISFINITE(reset.vel_var) ? math::max(reset.vel_var, 0.01f) : 0.25f;
 	const Vector2f before{_ekf.getVelocity().xy()};
 	_ekf.resetHorizontalOutputVelocityTo(vel_ne, vel_var);

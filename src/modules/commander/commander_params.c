@@ -1089,8 +1089,9 @@ PARAM_DEFINE_INT32(FORMIC_VIO_MF, 5);
 /**
  * Formic return to Position delay
  *
- * After a VIO failsafe dropped Position mode to Altitude mode, Position mode
- * comes back this long after the VIO is offerable (healthy and NOMINAL) again.
+ * After a failsafe dropped Position mode to Altitude mode, Position mode comes back this
+ * long after a position source (the VIO or GPS) is good again. The source arbiter of the EKF2
+ * selector also waits this long before it switches back to the preferred source.
  *
  * @group Commander
  * @unit s
@@ -1099,3 +1100,21 @@ PARAM_DEFINE_INT32(FORMIC_VIO_MF, 5);
  * @decimal 1
  */
 PARAM_DEFINE_FLOAT(FORMIC_RET_DELAY, 3.0f);
+
+/**
+ * Formic RC position source switch
+ *
+ * The RC AUX channel of a three position switch that picks the position source.
+ * Low: VIO only. Middle: FORMIC_EST_PREF decides. High: GPS only. The switch wins over
+ * FORMIC_EST_PREF. Without RC, FORMIC_EST_PREF decides.
+ *
+ * @group Commander
+ * @value 0 None
+ * @value 1 AUX1
+ * @value 2 AUX2
+ * @value 3 AUX3
+ * @value 4 AUX4
+ * @value 5 AUX5
+ * @value 6 AUX6
+ */
+PARAM_DEFINE_INT32(FORMIC_SRC_RC, 0);

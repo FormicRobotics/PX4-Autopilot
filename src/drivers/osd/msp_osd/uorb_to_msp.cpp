@@ -778,8 +778,34 @@ msp_rendor_formic_vision_quality_t construct_rendor_FORMIC_VISION_QUALITY(const 
 	return vision_quality;
 }
 
+const char *formic_gps_fail_label(uint16_t gps_fail)
+{
+	// the order a pilot would fix them in
+	if (gps_fail & formic_source_status_s::GPS_FAIL_STALE) { return "OFF"; }
+
+	if (gps_fail & formic_source_status_s::GPS_FAIL_JAM) { return "JAM"; }
+
+	if (gps_fail & formic_source_status_s::GPS_FAIL_SPOOF) { return "SPF"; }
+
+	if (gps_fail & formic_source_status_s::GPS_FAIL_FIX) { return "FIX"; }
+
+	if (gps_fail & formic_source_status_s::GPS_FAIL_SAT) { return "SAT"; }
+
+	if (gps_fail & formic_source_status_s::GPS_FAIL_HDOP) { return "DOP"; }
+
+	if (gps_fail & formic_source_status_s::GPS_FAIL_EPH) { return "EPH"; }
+
+	if (gps_fail & formic_source_status_s::GPS_FAIL_SACC) { return "SPD"; }
+
+	if (gps_fail & formic_source_status_s::GPS_FAIL_EKF) { return "EKF"; }
+
+	if (gps_fail & formic_source_status_s::GPS_FAIL_SPEED) { return "VEL"; }
+
+	return "";
+}
+
 msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_vio_est_status_s &vio,
-		bool in_position, const formic_pos_req_s &pos_req)
+		bool in_position, const formic_pos_req_s &pos_req, const formic_source_status_s &source, bool source_fresh)
 {
 	msp_rendor_formicc_vio_status_t vio_status = {};
 	vio_status.subCommand = MSP_DP_WRITE_STRING;
@@ -791,16 +817,36 @@ msp_rendor_formicc_vio_status_t construct_rendor_FORMIC_VIO_STATUS(const formic_
 	const bool degraded = (vio.vio_status == formic_vio_est_status_s::VIO_STATUS_DEGRADED);
 
 	// The str buffer is 8 bytes, so labels must be <= 7 chars.
-	const char *label = "";
+	char label[8] = "";
+	const bool on_gps = source_fresh && (source.source == formic_source_status_s::SOURCE_GPS);
+	const bool on_vio = source_fresh && (source.source == formic_source_status_s::SOURCE_VIO);
 
 	if (in_position) {
-		label = degraded ? "POS-DEG" : "POS";
+		if (on_gps) {
+			snprintf(label, sizeof(label), "POS GPS");
+
+		} else if (on_vio) {
+			snprintf(label, sizeof(label), degraded ? "VIO DEG" : "POS VIO");
+
+		} else {
+			snprintf(label, sizeof(label), degraded ? "POS-DEG" : "POS");
+		}
 
 	} else if (pos_req.pos_req) {
-		label = "WAIT"; // Position wanted, waiting for the VIO or the return delay
+		// Position wanted, waiting for a source or the return delay. With GPS as the first or only choice,
+		// the GPS check that fails.
+		const bool gps_wanted = source_fresh && ((source.setting == formic_source_status_s::SETTING_AUTO_GPS_FIRST)
+					|| (source.setting == formic_source_status_s::SETTING_GPS_ONLY));
+
+		if (gps_wanted && !source.gps_good && (source.gps_fail != 0)) {
+			snprintf(label, sizeof(label), "GPS:%s", formic_gps_fail_label(source.gps_fail));
+
+		} else {
+			snprintf(label, sizeof(label), "WAIT");
+		}
 
 	} else if (degraded) {
-		label = "DEGRAD";
+		snprintf(label, sizeof(label), "DEGRAD");
 	}
 
 	memset(&vio_status.str[0], 0, sizeof(vio_status.str));

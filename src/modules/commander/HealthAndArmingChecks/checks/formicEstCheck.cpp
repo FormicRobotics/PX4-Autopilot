@@ -79,5 +79,24 @@ void FormicEstChecks::checkAndReport(const Context &context, Report &reporter)
 		if (reporter.mavlink_log_pub()) {
 			mavlink_log_critical(reporter.mavlink_log_pub(), "Preflight Fail: FORMIC_VIO_SRC 1 needs EKF2_EV_CTRL 0");
 		}
+
+	} else if (_ekf2_ev_ctrl != 0) {
+		/* EVENT
+		 * @description
+		 * EKF2 (estimator instance 0) flies on IMU, baro, mag and GPS. The VIO goes into formic_vio_est
+		 * (instance 1) only, and the EKF2 selector picks one of the two. With <param>EKF2_EV_CTRL</param>
+		 * not 0, EKF2 would fuse vision as well.
+		 *
+		 * <profile name="dev">
+		 * Set <param>EKF2_EV_CTRL</param> to 0.
+		 * </profile>
+		 */
+		reporter.healthFailure(NavModes::All, health_component_t::local_position_estimate,
+				       events::ID("check_formic_est_ev_into_ekf2"),
+				       events::Log::Warning, "EKF2_EV_CTRL is not 0: vision goes into EKF2");
+
+		if (reporter.mavlink_log_pub()) {
+			mavlink_log_warning(reporter.mavlink_log_pub(), "Preflight: EKF2_EV_CTRL is not 0, vision goes into EKF2");
+		}
 	}
 }

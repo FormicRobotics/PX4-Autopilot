@@ -39,6 +39,8 @@
 #include <uORB/topics/estimator_aid_source1d.h>
 #include <uORB/topics/formic_pos_req.h>
 #include <uORB/topics/formic_vio_est_status.h>
+#include <uORB/topics/formic_source_status.h>
+#include <uORB/topics/manual_control_setpoint.h>
 #include <uORB/topics/estimator_selector_status.h>
 #include <uORB/topics/offboard_control_mode.h>
 #include <parameters/param.h>
@@ -118,13 +120,18 @@ private:
 	// Returns true if nav_state is one that requires local or global position, or is Offboard
 	// with position or velocity setpoints (formic_frames::mode_needs_position).
 	bool modeRequiresPosition(uint8_t nav_state);
-	// True when the VIO instance (formic_vio_est) is the primary and healthy.
+	// True when the EKF2 selector reports a good position source (the VIO or GPS) and publishes it.
 	bool evReadyForPosition();
+	// The newest formic_source_status. false: the selector does not publish it (stale).
+	bool sourceStatus(formic_source_status_s &status);
+	// Position of the RC source switch FORMIC_SRC_RC (formic_pos_req_s::SRC_RC_*).
+	uint8_t readSourceSwitch();
 	void publish_formic_pos_req(bool pos_requested);
 
-	// Decides formic_pos_req.use_vision_now, which asks the EKF2 selector for the VIO
-	// instance. Entering Position, the estimator switches first and the mode second; leaving it (also by
-	// failsafe) the mode changes first and the estimator second.
+	// Decides formic_pos_req.use_vision_now, which asks the EKF2 selector for a position source, and passes the
+	// RC source switch. The selector's arbiter picks the source (the VIO instance or EKF2 on GPS): commander does
+	// not. Entering Position, the estimator switches first and the mode second; leaving it (also by failsafe)
+	// the mode changes first and the estimator second.
 	void updateVisionRole();
 	///////add by naor ////////////////
 
@@ -152,5 +159,11 @@ private:
 	bool _pos_req_last{false};                    ///< last formic_pos_req.pos_req published
 	bool _use_vision_now{false};
 	hrt_abstime _last_nav_pos_us{0};              ///< last time the nav_state was a position mode
-	hrt_abstime _vio_offerable_since_us{0};       ///< 0: not offerable now
+	hrt_abstime _vio_offerable_since_us{0};       ///< a position source is good since; 0: none is good now
+
+	// RC source switch
+	param_t _param_formic_src_rc{PARAM_INVALID};
+	uORB::Subscription _formic_source_status_sub{ORB_ID(formic_source_status)};
+	uORB::Subscription _manual_control_setpoint_sub{ORB_ID(manual_control_setpoint)};
+	uint8_t _src_rc{formic_pos_req_s::SRC_RC_NONE};
 };

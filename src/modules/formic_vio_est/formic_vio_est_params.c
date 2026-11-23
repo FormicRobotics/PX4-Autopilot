@@ -37,6 +37,20 @@ PARAM_DEFINE_INT32(FORMIC_VIO_DLY, 400);
 PARAM_DEFINE_FLOAT(FORMIC_VIO_TOUT, 0.3f);
 
 /**
+ * Formic VIO settle time
+ *
+ * A new VIO segment (the first one, or one after a gap longer than FORMIC_VIO_GAP) can be
+ * switched to only after the VIO status has been NOMINAL for this long.
+ *
+ * @group Formic VIO Estimator
+ * @unit s
+ * @min 0.0
+ * @max 30.0
+ * @decimal 1
+ */
+PARAM_DEFINE_FLOAT(FORMIC_VIO_TSET, 3.0f);
+
+/**
  * Formic VIO estimator attitude time constant
  *
  * How fast the output is pulled toward each VIO attitude.
